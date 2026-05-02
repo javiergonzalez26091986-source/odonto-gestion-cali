@@ -14,17 +14,30 @@ st.title("🦷 Gestión - Odontología Familiar Especializada")
 # ID de la carpeta de Drive proporcionada
 ID_CARPETA = "1hauuaIMZOztMBJSUANg0Ce7kquOAqYEu"
 
-# --- FUNCIÓN DE SUBIDA A DRIVE ---
+# --- FUNCIÓN DE SUBIDA A DRIVE CORREGIDA (EVITA ERROR 403) ---
 def subir_archivo_drive(archivo_subido, nombre_archivo):
     try:
         info_claves = st.secrets["connections"]["gsheets"]
         creds = service_account.Credentials.from_service_account_info(info_claves)
         service = build('drive', 'v3', credentials=creds)
         
-        file_metadata = {'name': nombre_archivo, 'parents': [ID_CARPETA]}
-        media = MediaIoBaseUpload(io.BytesIO(archivo_subido.getvalue()), mimetype=archivo_subido.type)
+        file_metadata = {
+            'name': nombre_archivo, 
+            'parents': [ID_CARPETA]
+        }
         
-        file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+        media = MediaIoBaseUpload(
+            io.BytesIO(archivo_subido.getvalue()), 
+            mimetype=archivo_subido.type,
+            resumable=True
+        )
+        
+        file = service.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields='id, webViewLink'
+        ).execute()
+        
         return file.get('webViewLink')
     except Exception as e:
         st.error(f"Error en Drive: {e}")
@@ -44,7 +57,6 @@ if menu == "Registro de Pacientes":
         cedula = st.text_input("Cédula")
         tel = st.text_input("Teléfono")
         fecha_reg = st.date_input("Fecha de Registro", datetime.date.today())
-        # CAMPO DE FOTO RESTAURADO
         foto_perfil = st.file_uploader("Subir Foto de Perfil / Documento", type=['jpg', 'png', 'jpeg'])
         nota = st.text_area("Notas")
         
@@ -62,11 +74,13 @@ if menu == "Registro de Pacientes":
                     "Teléfono": str(tel), 
                     "Fecha": str(fecha_reg), 
                     "Notas": nota.upper(),
-                    "Foto": link_foto_perfil # Campo para la pestaña Pacientes
+                    "Foto": link_foto_perfil
                 }])
                 conn.update(worksheet="Pacientes", data=nuevo)
-                st.success(f"✅ Paciente registrado. Foto: {link_foto_perfil}")
+                st.success(f"✅ Paciente registrado.")
                 st.cache_data.clear()
+            else:
+                st.error("Nombre y Cédula son obligatorios.")
 
 # --- MÓDULO 2: EVOLUCIÓN DE PACIENTES ---
 elif menu == "Evolución de Pacientes":
@@ -82,7 +96,6 @@ elif menu == "Evolución de Pacientes":
                 motivo = st.text_area("Motivo")
                 diag = st.text_area("Diagnóstico")
                 trata = st.text_area("Tratamiento")
-                # CAMPO DE FOTO RESTAURADO
                 foto_ev = st.file_uploader("Subir Radiografía / Foto del día", type=['jpg', 'png', 'jpeg'])
                 
                 if st.form_submit_button("Guardar Evolución"):
@@ -101,7 +114,7 @@ elif menu == "Evolución de Pacientes":
                         "Link_Foto": link_ev
                     }])
                     conn.update(worksheet="Consultas", data=nueva_ev)
-                    st.success(f"✅ Consulta guardada. Link: {link_ev}")
+                    st.success(f"✅ Consulta guardada exitosamente.")
                     st.cache_data.clear()
 
 # --- MÓDULO 3: FACTURACIÓN ---
