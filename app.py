@@ -13,8 +13,8 @@ st.title("🦷 Gestión - Odontología Familiar Especializada")
 
 # ID de tu carpeta de Drive (FOTOS_ODONTOLOGIA)
 ID_CARPETA_DRIVE = "1hauuaIMZOztMBJSUANg0Ce7kquOAqYEu"
-# TU CORREO DE GOOGLE (El que es dueño de la carpeta)
-TU_CORREO = "tu_correo@gmail.com"  # <--- CAMBIA ESTO POR TU EMAIL REAL
+# Correo que recibirá la propiedad del archivo para usar su cuota de espacio
+TU_CORREO = "javier.gonzalez26091986@gmail.com" 
 
 # --- CONEXIÓN A GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -30,13 +30,15 @@ def cargar_datos():
 
 df_pacientes, df_consultas, df_factura = cargar_datos()
 
-# --- FUNCIÓN PARA SUBIR A DRIVE (SOLUCIÓN DEFINITIVA DE CUOTA) ---
+# --- FUNCIÓN PARA SUBIR A DRIVE CON TRANSFERENCIA DE PROPIEDAD ---
 def subir_a_drive(archivo_subido, nombre_archivo):
     try:
+        # Preparar credenciales desde los Secrets de Streamlit
         creds_info = st.secrets["connections"]["gsheets"]
         creds = service_account.Credentials.from_service_account_info(creds_info)
         service = build('drive', 'v3', credentials=creds)
         
+        # Guardar temporalmente el archivo para procesar la subida
         temp_path = f"temp_{nombre_archivo}"
         with open(temp_path, "wb") as f:
             f.write(archivo_subido.getbuffer())
@@ -48,7 +50,7 @@ def subir_a_drive(archivo_subido, nombre_archivo):
         
         media = MediaFileUpload(temp_path, mimetype='image/jpeg', resumable=True)
         
-        # 1. Crear el archivo
+        # 1. Crear el archivo en Drive
         file = service.files().create(
             body=file_metadata, 
             media_body=media, 
@@ -57,13 +59,14 @@ def subir_a_drive(archivo_subido, nombre_archivo):
         
         file_id = file.get('id')
 
-        # 2. TRANSFERIR PROPIEDAD (Para usar tu cuota de espacio)
+        # 2. TRANSFERIR PROPIEDAD: Esto evita el error de "Quota Exceeded"
         permission = {
             'type': 'user',
             'role': 'owner',
             'emailAddress': TU_CORREO
         }
-        # transferOwnership=True es vital aquí
+        
+        # 'transferOwnership=True' es la instrucción clave para Google
         service.permissions().create(
             fileId=file_id, 
             body=permission, 
@@ -107,10 +110,10 @@ if menu == "Registro de Pacientes":
                         "Foto": "SUBIDA"
                     }])
                     conn.update(worksheet="Pacientes", data=nuevo)
-                    st.success(f"✅ {nombre} registrado correctamente.")
+                    st.success(f"✅ {nombre} registrado con éxito.")
                     st.cache_data.clear()
             else:
-                st.warning("Complete Nombre, Cédula y Foto.")
+                st.warning("Por favor complete Nombre, Cédula y Foto.")
 
 # --- MÓDULO 2: EVOLUCIÓN ---
 elif menu == "Evolución de Pacientes":
@@ -134,7 +137,7 @@ elif menu == "Evolución de Pacientes":
                             with st.expander(f"Fecha: {fila['Fecha']}"):
                                 st.write(f"**Motivo:** {fila['Motivo']}")
                                 st.write(f"**Tratamiento:** {fila['Tratamiento']}")
-                    else: st.info("No hay evoluciones.")
+                    else: st.info("No hay evoluciones registradas.")
 
             with col_img:
                 st.subheader("📸 Galería en Drive")
@@ -144,9 +147,9 @@ elif menu == "Evolución de Pacientes":
             with st.form("nueva_ev"):
                 st.subheader("Registrar Nueva Evolución")
                 f_ev = st.date_input("Fecha", datetime.date.today())
-                motivo = st.text_area("Motivo")
-                trata = st.text_area("Tratamiento")
-                if st.form_submit_button("Guardar"):
+                motivo = st.text_area("Motivo de consulta")
+                trata = st.text_area("Tratamiento realizado")
+                if st.form_submit_button("Guardar Evolución"):
                     nueva_fila = pd.DataFrame([{
                         "Cédula": str(cedula_p),
                         "Fecha": str(f_ev),
@@ -154,17 +157,17 @@ elif menu == "Evolución de Pacientes":
                         "Tratamiento": trata.upper()
                     }])
                     conn.update(worksheet="Consultas", data=nueva_fila)
-                    st.success("✅ Guardado.")
+                    st.success("✅ Evolución guardada correctamente.")
                     st.cache_data.clear()
 
 # --- MÓDULO 3: FACTURACIÓN ---
 elif menu == "Facturacion Interna":
     st.header("💰 Facturación Interna")
     if not df_pacientes.empty:
-        p_f = st.selectbox("Paciente", df_pacientes['Nombre'].tolist())
+        p_f = st.selectbox("Seleccione Paciente para Cobro", df_pacientes['Nombre'].tolist())
         with st.form("f_pago"):
-            servicio = st.text_input("Servicio")
-            valor = st.number_input("Valor", min_value=0, step=1000)
+            servicio = st.text_input("Servicio / Procedimiento")
+            valor = st.number_input("Valor del Procedimiento", min_value=0, step=1000)
             if st.form_submit_button("Registrar Pago"):
                 pago = pd.DataFrame([{
                     "Paciente": p_f, 
@@ -173,5 +176,5 @@ elif menu == "Facturacion Interna":
                     "Valor": valor
                 }])
                 conn.update(worksheet="Facturacion", data=pago)
-                st.success("✅ Pago registrado.")
+                st.success(f"✅ Pago de {p_f} registrado.")
                 st.cache_data.clear()
