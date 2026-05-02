@@ -2,46 +2,99 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import datetime
-import base64
-from PIL import Image
-import io
 
+# --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Gestión Odontológica", page_icon="🦷")
 st.title("🦷 Gestión - Odontología Familiar Especializada")
 
+# URL de tu carpeta de Drive para acceso rápido
+URL_CARPETA_DRIVE = "https://drive.google.com/drive/folders/1hauuaIMZOztMBJSUANg0Ce7kquOAqYEu"
+
+# --- CONEXIÓN A SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def preparar_imagen_base64(archivo_subido):
-    # Abrimos la imagen y la redimensionamos para que no exceda el límite de la celda de Sheets
-    img = Image.open(archivo_subido)
-    img.thumbnail((200, 200)) # Tamaño pequeño para que quepa en el límite de caracteres
-    
-    buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=70)
-    img_str = base64.b64encode(buffer.getvalue()).decode()
-    return f"data:image/jpeg;base64,{img_str}"
+# Intentar leer los datos existentes para que el resto de los módulos funcionen
+try:
+    df_pacientes = conn.read(worksheet="Pacientes", ttl=0)
+except Exception:
+    df_pacientes = pd.DataFrame()
 
-menu = st.sidebar.selectbox("Seleccione", ["Registro de Pacientes"])
+menu = st.sidebar.selectbox("Seleccione una opción", ["Registro de Pacientes", "Evolución de Pacientes", "Facturacion Interna"])
 
+# --- MÓDULO 1: REGISTRO DE PACIENTES ---
 if menu == "Registro de Pacientes":
+    st.header("📋 Registro de Nuevo Paciente")
     with st.form("form_reg"):
         nombre = st.text_input("Nombre Completo")
         cedula = st.text_input("Cédula")
-        foto_perfil = st.file_uploader("Subir Foto", type=['jpg', 'png', 'jpeg'])
+        tel = st.text_input("Teléfono")
+        fecha_reg = st.date_input("Fecha de Registro", datetime.date.today())
+        nota = st.text_area("Notas")
         
-        if st.form_submit_button("Registrar"):
+        st.info(f"📂 Nota: Sube las fotos directamente a la carpeta de Drive: [Abrir Carpeta]({URL_CARPETA_DRIVE})")
+        
+        if st.form_submit_button("Registrar Paciente"):
             if nombre and cedula:
-                txt_foto = "SIN FOTO"
-                if foto_perfil:
-                    txt_foto = preparar_imagen_base64(foto_perfil)
-                
                 nuevo = pd.DataFrame([{
                     "Nombre": nombre.upper(), 
                     "Cédula": str(cedula), 
-                    "Foto_Base64": txt_foto
+                    "Teléfono": str(tel), 
+                    "Fecha": str(fecha_reg), 
+                    "Notas": nota.upper(),
+                    "Foto": "VER EN DRIVE"
                 }])
                 
                 conn.update(worksheet="Pacientes", data=nuevo)
-                st.success("✅ Datos y foto guardados en el Sheets.")
+                st.success(f"✅ Paciente {nombre} registrado con éxito.")
+                st.cache_data.clear()
             else:
-                st.error("Faltan datos.")
+                st.error("Nombre y Cédula son obligatorios.")
+
+# --- MÓDULO 2: EVOLUCIÓN DE PACIENTES ---
+elif menu == "Evolución de Pacientes":
+    st.header("📝 Evolución y Consultas")
+    if not df_pacientes.empty:
+        lista_nombres = df_pacientes['Nombre'].unique().tolist()
+        sel = st.selectbox("Paciente", [""] + lista_nombres)
+        
+        if sel != "":
+            cedula_p = df_pacientes[df_pacientes['Nombre'] == sel]['Cédula'].values[0]
+            with st.form("form_ev"):
+                f_ev = st.date_input("Fecha Consulta", datetime.date.today())
+                motivo = st.text_area("Motivo")
+                diag = st.text_area("Diagnóstico")
+                trata = st.text_area("Tratamiento")
+                
+                if st.form_submit_button("Guardar Evolución"):
+                    nueva_ev = pd.DataFrame([{
+                        "Cédula": str(cedula_p),
+                        "Fecha": str(f_ev),
+                        "Motivo": motivo.upper(),
+                        "Diagnóstico": diag.upper(),
+                        "Tratamiento": trata.upper(),
+                        "Link_Foto": "VER EN DRIVE"
+                    }])
+                    conn.update(worksheet="Consultas", data=nueva_ev)
+                    st.success("✅ Evolución guardada correctamente.")
+                    st.cache_data.clear()
+    else:
+        st.warning("No hay pacientes registrados aún.")
+
+# --- MÓDULO 3: FACTURACIÓN ---
+elif menu == "Facturacion Interna":
+    st.header("💰 Facturación")
+    if not df_pacientes.empty:
+        p_f = st.selectbox("Paciente", df_pacientes['Nombre'].unique().tolist())
+        with st.form("f_pago"):
+            serv = st.text_input("Servicio")
+            val = st.number_input("Valor", min_value=0)
+            if st.form_submit_button("Registrar Pago"):
+                pago = pd.DataFrame([{
+                    "Paciente": p_f, 
+                    "Fecha": str(datetime.date.today()), 
+                    "Servicio": serv.upper(), 
+                    "Valor": val
+                }])
+                conn.update(worksheet="Facturacion", data=pago)
+                st.success("✅ Pago registrado.")
+                st.cache_data.clear()
