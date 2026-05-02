@@ -3,18 +3,16 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import datetime
 
-# Configuración de la página
+# 1. Configuración y Conexión (Lo que ya funcionaba)
 st.set_page_config(page_title="Gestión Odontológica", page_icon="🦷")
-
 st.title("🦷 Gestión - Odontología Familiar Especializada")
 
-# Conexión a Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Lectura de datos existentes
-df_pacientes = conn.read(worksheet="Pacientes")
+# 2. Carga de datos CRÍTICA (Para que aparezcan los pacientes en la lista)
+df_pacientes = conn.read(worksheet="Pacientes", ttl=0)
 
-# Menú Lateral
+# Menú Lateral con la estructura limpia
 menu = st.sidebar.selectbox(
     "Seleccione una opción", 
     ["Registro de Pacientes", "Evolución de Pacientes", "Facturacion Interna"]
@@ -39,71 +37,66 @@ if menu == "Registro de Pacientes":
                     "Fecha": str(fecha),
                     "Notas": notas.upper()
                 }])
-                conn.create(worksheet="Pacientes", data=nuevo_paciente)
+                # Usamos update para no borrar los encabezados
+                conn.update(worksheet="Pacientes", data=nuevo_paciente)
                 st.success(f"¡Paciente {nombre} registrado con éxito!")
                 st.cache_data.clear()
             else:
                 st.error("Nombre y Cédula son obligatorios.")
 
-# --- MÓDULO 2: EVOLUCIÓN DE PACIENTES (EL NUEVO) ---
+# --- MÓDULO 2: EVOLUCIÓN DE PACIENTES (Corregido para leer el Sheets) ---
 elif menu == "Evolución de Pacientes":
     st.header("📝 Evolución y Consultas")
     
     if not df_pacientes.empty:
-        # Buscador por nombre
-        nombres_lista = df_pacientes['Nombre'].tolist()
-        seleccion_nombre = st.selectbox("Seleccione el Paciente", [""] + nombres_lista)
+        # Aquí cargamos los nombres reales de tu Google Sheets
+        nombres_pacientes = df_pacientes['Nombre'].unique().tolist()
+        seleccion = st.selectbox("Seleccione el Paciente para registrar consulta", [""] + nombres_pacientes)
         
-        if seleccion_nombre != "":
-            # Obtener la cédula del paciente seleccionado
-            datos_paciente = df_pacientes[df_pacientes['Nombre'] == seleccion_nombre]
-            cedula_sel = datos_paciente['Cédula'].values[0]
-            
-            st.info(f"Registrando consulta para: **{seleccion_nombre}** (CC: {cedula_sel})")
+        if seleccion != "":
+            # Extraemos la cédula del paciente elegido
+            datos_p = df_pacientes[df_pacientes['Nombre'] == seleccion].iloc[0]
+            st.info(f"Paciente: **{seleccion}** | CC: **{datos_p['Cédula']}**")
             
             with st.form("form_consulta"):
-                f_consulta = st.date_input("Fecha de Consulta", datetime.date.today())
-                motivo = st.text_area("Motivo de la Consulta")
-                diagnostico = st.text_area("Diagnóstico / Hallazgos")
-                tratamiento = st.text_area("Tratamiento Realizado / Plan")
+                f_consulta = st.date_input("Fecha", datetime.date.today())
+                motivo = st.text_area("Motivo de Consulta")
+                diagnostico = st.text_area("Diagnóstico")
+                tratamiento = st.text_area("Tratamiento")
                 
-                if st.form_submit_button("Guardar Evolución"):
-                    nueva_fila_consulta = pd.DataFrame([{
-                        "Cédula": str(cedula_sel),
+                if st.form_submit_button("Guardar Consulta"):
+                    nueva_consulta = pd.DataFrame([{
+                        "Cédula": str(datos_p['Cédula']),
                         "Fecha": str(f_consulta),
                         "Motivo": motivo.upper(),
                         "Diagnóstico": diagnostico.upper(),
                         "Tratamiento": tratamiento.upper(),
                         "Link_Foto": ""
                     }])
-                    
-                    # Guardar en la pestaña Consultas
-                    conn.create(worksheet="Consultas", data=nueva_fila_consulta)
-                    st.success("¡Evolución guardada correctamente en la ficha del paciente!")
+                    conn.update(worksheet="Consultas", data=nueva_consulta)
+                    st.success("Consulta guardada en la pestaña Consultas")
                     st.cache_data.clear()
     else:
-        st.warning("No hay pacientes registrados para crear una evolución.")
+        st.error("No se encontraron datos en la pestaña 'Pacientes'. Verifica el Google Sheets.")
 
 # --- MÓDULO 3: FACTURACIÓN INTERNA ---
 elif menu == "Facturacion Interna":
     st.header("💰 Registro de Facturación")
     if not df_pacientes.empty:
-        nombres_lista = df_pacientes['Nombre'].tolist()
-        paciente_fact = st.selectbox("Paciente a Facturar", nombres_lista)
+        nombres_f = df_pacientes['Nombre'].unique().tolist()
+        p_fact = st.selectbox("Paciente a Facturar", nombres_f)
         
         with st.form("form_factura"):
-            servicio = st.text_input("Concepto / Servicio")
-            valor = st.number_input("Valor total", min_value=0)
-            metodo = st.selectbox("Método de Pago", ["Efectivo", "Transferencia", "Tarjeta"])
+            servicio = st.text_input("Concepto")
+            valor = st.number_input("Valor", min_value=0)
             
             if st.form_submit_button("Registrar Pago"):
                 nueva_factura = pd.DataFrame([{
-                    "Paciente": paciente_fact,
+                    "Paciente": p_fact,
                     "Fecha": str(datetime.date.today()),
                     "Servicio": servicio.upper(),
-                    "Valor": valor,
-                    "Metodo": metodo
+                    "Valor": valor
                 }])
-                conn.create(worksheet="Facturacion", data=nueva_factura)
-                st.success("¡Factura registrada!")
+                conn.update(worksheet="Facturacion", data=nueva_factura)
+                st.success("Pago registrado exitosamente")
                 st.cache_data.clear()
