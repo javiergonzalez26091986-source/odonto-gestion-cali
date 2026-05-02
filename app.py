@@ -2,17 +2,22 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import datetime
+from PIL import Image
 
-# 1. Configuración y Conexión (Lo que ya funcionaba)
+# --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Gestión Odontológica", page_icon="🦷")
 st.title("🦷 Gestión - Odontología Familiar Especializada")
 
+# URL de la carpeta de Drive proporcionada por el usuario
+URL_CARPETA_DRIVE = "https://drive.google.com/drive/folders/1hauuaIMZOztMBJSUANg0Ce7kquOAqYEu"
+
+# Conexión a Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 2. Carga de datos CRÍTICA (Para que aparezcan los pacientes en la lista)
+# Lectura de datos existentes (ttl=0 para datos frescos)
 df_pacientes = conn.read(worksheet="Pacientes", ttl=0)
 
-# Menú Lateral con la estructura limpia
+# Menú Lateral
 menu = st.sidebar.selectbox(
     "Seleccione una opción", 
     ["Registro de Pacientes", "Evolución de Pacientes", "Facturacion Interna"]
@@ -26,6 +31,7 @@ if menu == "Registro de Pacientes":
         cedula = st.text_input("Cédula")
         telefono = st.text_input("Teléfono")
         fecha = st.date_input("Fecha de Registro", datetime.date.today())
+        foto_perfil = st.file_uploader("Subir foto inicial / Perfil", type=['jpg', 'png', 'jpeg'])
         notas = st.text_area("Notas Iniciales")
         
         if st.form_submit_button("Registrar Paciente"):
@@ -37,24 +43,24 @@ if menu == "Registro de Pacientes":
                     "Fecha": str(fecha),
                     "Notas": notas.upper()
                 }])
-                # Usamos update para no borrar los encabezados
+                # Actualización de la hoja Pacientes
                 conn.update(worksheet="Pacientes", data=nuevo_paciente)
                 st.success(f"¡Paciente {nombre} registrado con éxito!")
+                if foto_perfil:
+                    st.info(f"Foto recibida. Recuerda subirla manualmente a la carpeta de Drive si es necesario: {URL_CARPETA_DRIVE}")
                 st.cache_data.clear()
             else:
                 st.error("Nombre y Cédula son obligatorios.")
 
-# --- MÓDULO 2: EVOLUCIÓN DE PACIENTES (Corregido para leer el Sheets) ---
+# --- MÓDULO 2: EVOLUCIÓN DE PACIENTES ---
 elif menu == "Evolución de Pacientes":
     st.header("📝 Evolución y Consultas")
     
     if not df_pacientes.empty:
-        # Aquí cargamos los nombres reales de tu Google Sheets
         nombres_pacientes = df_pacientes['Nombre'].unique().tolist()
-        seleccion = st.selectbox("Seleccione el Paciente para registrar consulta", [""] + nombres_pacientes)
+        seleccion = st.selectbox("Seleccione el Paciente", [""] + nombres_pacientes)
         
         if seleccion != "":
-            # Extraemos la cédula del paciente elegido
             datos_p = df_pacientes[df_pacientes['Nombre'] == seleccion].iloc[0]
             st.info(f"Paciente: **{seleccion}** | CC: **{datos_p['Cédula']}**")
             
@@ -63,6 +69,7 @@ elif menu == "Evolución de Pacientes":
                 motivo = st.text_area("Motivo de Consulta")
                 diagnostico = st.text_area("Diagnóstico")
                 tratamiento = st.text_area("Tratamiento")
+                archivo_foto = st.file_uploader("Subir Radiografía / Foto del día", type=['jpg', 'png', 'jpeg'])
                 
                 if st.form_submit_button("Guardar Consulta"):
                     nueva_consulta = pd.DataFrame([{
@@ -71,13 +78,16 @@ elif menu == "Evolución de Pacientes":
                         "Motivo": motivo.upper(),
                         "Diagnóstico": diagnostico.upper(),
                         "Tratamiento": tratamiento.upper(),
-                        "Link_Foto": ""
+                        "Link_Foto": URL_CARPETA_DRIVE if archivo_foto else "SIN FOTO"
                     }])
+                    # Actualización de la hoja Consultas
                     conn.update(worksheet="Consultas", data=nueva_consulta)
-                    st.success("Consulta guardada en la pestaña Consultas")
+                    st.success("Consulta guardada exitosamente.")
+                    if archivo_foto:
+                        st.image(archivo_foto, caption="Vista previa de la imagen cargada")
                     st.cache_data.clear()
     else:
-        st.error("No se encontraron datos en la pestaña 'Pacientes'. Verifica el Google Sheets.")
+        st.error("No hay pacientes registrados.")
 
 # --- MÓDULO 3: FACTURACIÓN INTERNA ---
 elif menu == "Facturacion Interna":
@@ -97,6 +107,7 @@ elif menu == "Facturacion Interna":
                     "Servicio": servicio.upper(),
                     "Valor": valor
                 }])
+                # Actualización de la hoja Facturacion
                 conn.update(worksheet="Facturacion", data=nueva_factura)
                 st.success("Pago registrado exitosamente")
                 st.cache_data.clear()
