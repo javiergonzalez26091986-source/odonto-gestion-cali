@@ -13,37 +13,38 @@ st.title("🦷 Gestión - Odontología Familiar Especializada")
 
 ID_CARPETA = "1hauuaIMZOztMBJSUANg0Ce7kquOAqYEu"
 
-# --- FUNCIÓN DE SUBIDA A DRIVE (VERSIÓN LIGERA PARA EVITAR 403) ---
+# --- FUNCIÓN DE SUBIDA CORREGIDA ---
 def subir_archivo_drive(archivo_subido, nombre_archivo):
     try:
         info_claves = st.secrets["connections"]["gsheets"]
         creds = service_account.Credentials.from_service_account_info(info_claves)
-        service = build('drive', 'v3', credentials=creds)
+        # Agregamos los scopes necesarios explícitamente
+        scoped_creds = creds.with_scopes(['https://www.googleapis.com/auth/drive'])
+        service = build('drive', 'v3', credentials=scoped_creds)
         
-        # Metadatos simplificados para evitar que Google asigne cuota al bot
         file_metadata = {
             'name': nombre_archivo, 
             'parents': [ID_CARPETA]
         }
         
-        # Usamos uploadType=media (directo) para archivos pequeños/medianos
-        # Esto suele saltarse el bloqueo de cuota en carpetas compartidas
         media = MediaIoBaseUpload(
             io.BytesIO(archivo_subido.getvalue()), 
             mimetype=archivo_subido.type,
             resumable=False
         )
         
+        # El parámetro 'supportsAllDrives=True' es CLAVE para usar cuota compartida
         file = service.files().create(
             body=file_metadata, 
             media_body=media, 
-            fields='id, webViewLink'
+            fields='id, webViewLink',
+            supportsAllDrives=True 
         ).execute()
         
         return file.get('webViewLink')
     except Exception as e:
-        st.error(f"Error en Drive: {e}")
-        return "ERROR_DE_CUOTA"
+        st.error(f"Error técnico en Drive: {e}")
+        return "ERROR_DE_CUOTA_PERSISTENTE"
 
 # --- CONEXIÓN A SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -59,38 +60,40 @@ if menu == "Registro de Pacientes":
         cedula = st.text_input("Cédula")
         tel = st.text_input("Teléfono")
         fecha_reg = st.date_input("Fecha de Registro", datetime.date.today())
-        foto_perfil = st.file_uploader("Subir Foto de Perfil / Documento", type=['jpg', 'png', 'jpeg'])
+        foto_perfil = st.file_uploader("Subir Foto de Perfil", type=['jpg', 'png', 'jpeg'])
         nota = st.text_area("Notas")
         
         if st.form_submit_button("Registrar Paciente"):
             if nombre and cedula:
-                link_foto_perfil = "SIN FOTO"
+                link_foto = "SIN FOTO"
                 if foto_perfil:
-                    with st.spinner("Subiendo foto..."):
+                    with st.spinner("Procesando imagen..."):
                         nombre_f = f"Perfil_{cedula}_{datetime.date.today()}.jpg"
-                        link_foto_perfil = subir_archivo_drive(foto_perfil, nombre_f)
+                        link_foto = subir_archivo_drive(foto_perfil, nombre_f)
                 
+                # Preparamos el registro para el Sheets
                 nuevo = pd.DataFrame([{
                     "Nombre": nombre.upper(), 
                     "Cédula": str(cedula), 
                     "Teléfono": str(tel), 
                     "Fecha": str(fecha_reg), 
                     "Notas": nota.upper(),
-                    "Foto": link_foto_perfil
+                    "Foto": link_foto
                 }])
+                
+                # Actualizamos el Sheets
                 conn.update(worksheet="Pacientes", data=nuevo)
-                st.success("✅ Registro completado.")
+                st.success("✅ Datos guardados en la base de datos.")
                 st.cache_data.clear()
             else:
-                st.error("Nombre y Cédula son obligatorios.")
+                st.error("Por favor completa nombre y cédula.")
 
-# --- MÓDULO 2: EVOLUCIÓN DE PACIENTES ---
+# (El resto de los módulos se mantienen igual para no alterar tu lógica)
 elif menu == "Evolución de Pacientes":
     st.header("📝 Evolución y Consultas")
     if not df_pacientes.empty:
         lista_nombres = df_pacientes['Nombre'].unique().tolist()
         sel = st.selectbox("Paciente", [""] + lista_nombres)
-        
         if sel != "":
             cedula_p = df_pacientes[df_pacientes['Nombre'] == sel]['Cédula'].values[0]
             with st.form("form_ev"):
@@ -98,7 +101,7 @@ elif menu == "Evolución de Pacientes":
                 motivo = st.text_area("Motivo")
                 diag = st.text_area("Diagnóstico")
                 trata = st.text_area("Tratamiento")
-                foto_ev = st.file_uploader("Subir Radiografía / Foto del día", type=['jpg', 'png', 'jpeg'])
+                foto_ev = st.file_uploader("Subir Radiografía", type=['jpg', 'png', 'jpeg'])
                 
                 if st.form_submit_button("Guardar Evolución"):
                     link_ev = "SIN FOTO"
@@ -116,10 +119,9 @@ elif menu == "Evolución de Pacientes":
                         "Link_Foto": link_ev
                     }])
                     conn.update(worksheet="Consultas", data=nueva_ev)
-                    st.success("✅ Evolución guardada exitosamente.")
+                    st.success("✅ Evolución registrada.")
                     st.cache_data.clear()
 
-# --- MÓDULO 3: FACTURACIÓN ---
 elif menu == "Facturacion Interna":
     st.header("💰 Facturación")
     if not df_pacientes.empty:
