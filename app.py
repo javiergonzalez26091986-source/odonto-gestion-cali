@@ -19,6 +19,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def cargar_datos():
     try:
+        # Cargamos las pestañas necesarias del Excel
         pacientes = conn.read(worksheet="Pacientes", ttl=0)
         consultas = conn.read(worksheet="Consultas", ttl=0)
         facturacion = conn.read(worksheet="Facturacion", ttl=0)
@@ -28,14 +29,18 @@ def cargar_datos():
 
 df_pacientes, df_consultas, df_factura = cargar_datos()
 
-# --- FUNCIÓN PARA SUBIR A DRIVE USANDO SECRETS ---
+# --- FUNCIÓN PARA SUBIR A DRIVE (CORREGIDA) ---
 def subir_a_drive(archivo_subido, nombre_archivo):
     try:
         scope = ['https://www.googleapis.com/auth/drive']
-        # Usamos la info de 'connections.gsheets' de tus Secrets
+        # Leemos desde st.secrets para evitar el archivo físico credentials.json
         creds_info = st.secrets["connections"]["gsheets"]
         creds = service_account.Credentials.from_service_account_info(
             creds_info, scopes=scope)
+        
+        # --- SOLUCIÓN AL ERROR 'access_token_expired' ---
+        # Definimos manualmente el atributo que PyDrive2 busca
+        creds.access_token_expired = False 
         
         gauth = GoogleAuth()
         gauth.credentials = creds
@@ -46,6 +51,7 @@ def subir_a_drive(archivo_subido, nombre_archivo):
             'parents': [{'id': ID_CARPETA_DRIVE}]
         })
         
+        # Buffer temporal para la subida
         temp_path = f"temp_{nombre_archivo}"
         with open(temp_path, "wb") as tmp:
             tmp.write(archivo_subido.getbuffer())
@@ -102,33 +108,34 @@ elif menu == "Evolución de Pacientes":
         paciente_sel = st.selectbox("Seleccione el Paciente", [""] + nombres_lista)
         
         if paciente_sel != "":
+            # Obtener datos y cédula para el historial
             datos_p = df_pacientes[df_pacientes['Nombre'] == paciente_sel].iloc[0]
             cedula_p = str(datos_p['Cédula']).split('.')[0]
             
             col_hist, col_img = st.columns([1, 1])
             
             with col_hist:
-                st.subheader("📜 Historial")
+                st.subheader("📜 Historial de Consultas")
                 if not df_consultas.empty:
-                    # Filtramos por cédula del paciente seleccionado
                     hist = df_consultas[df_consultas['Cédula'].astype(str).str.contains(cedula_p)]
                     if not hist.empty:
                         for _, fila in hist.iterrows():
                             with st.expander(f"Fecha: {fila['Fecha']}"):
                                 st.write(f"**Motivo:** {fila['Motivo']}")
                                 st.write(f"**Tratamiento:** {fila['Tratamiento']}")
-                    else: st.info("No hay evoluciones registradas.")
+                    else: st.info("No hay evoluciones para este paciente.")
 
             with col_img:
                 st.subheader("📸 Galería en Drive")
+                # Visor de la carpeta compartida
                 st.markdown(f'<iframe src="https://drive.google.com/embeddedfolderview?id={ID_CARPETA_DRIVE}#grid" width="100%" height="400" frameborder="0"></iframe>', unsafe_allow_html=True)
 
             st.divider()
             with st.form("nueva_ev"):
                 st.subheader("Registrar Nueva Evolución")
                 f_ev = st.date_input("Fecha", datetime.date.today())
-                motivo = st.text_area("Motivo")
-                trata = st.text_area("Tratamiento")
+                motivo = st.text_area("Motivo de consulta")
+                trata = st.text_area("Tratamiento realizado")
                 if st.form_submit_button("Guardar Evolución"):
                     nueva_fila = pd.DataFrame([{
                         "Cédula": str(cedula_p),
@@ -144,10 +151,10 @@ elif menu == "Evolución de Pacientes":
 elif menu == "Facturacion Interna":
     st.header("💰 Facturación Interna")
     if not df_pacientes.empty:
-        p_f = st.selectbox("Paciente", df_pacientes['Nombre'].tolist())
+        p_f = st.selectbox("Seleccione Paciente para Cobro", df_pacientes['Nombre'].tolist())
         with st.form("f_pago"):
             servicio = st.text_input("Servicio / Procedimiento")
-            valor = st.number_input("Valor", min_value=0, step=1000)
+            valor = st.number_input("Valor del Procedimiento", min_value=0, step=1000)
             if st.form_submit_button("Registrar Pago"):
                 pago = pd.DataFrame([{
                     "Paciente": p_f, 
@@ -156,5 +163,5 @@ elif menu == "Facturacion Interna":
                     "Valor": valor
                 }])
                 conn.update(worksheet="Facturacion", data=pago)
-                st.success("✅ Pago registrado con éxito.")
+                st.success(f"✅ Pago de {p_f} registrado con éxito.")
                 st.cache_data.clear()
