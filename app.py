@@ -13,48 +13,37 @@ st.title("🦷 Gestión - Odontología Familiar Especializada")
 
 ID_CARPETA = "1hauuaIMZOztMBJSUANg0Ce7kquOAqYEu"
 
-# --- FUNCIÓN DE SUBIDA A DRIVE (BYPASS DE CUOTA) ---
+# --- FUNCIÓN DE SUBIDA A DRIVE (VERSIÓN LIGERA PARA EVITAR 403) ---
 def subir_archivo_drive(archivo_subido, nombre_archivo):
     try:
         info_claves = st.secrets["connections"]["gsheets"]
         creds = service_account.Credentials.from_service_account_info(info_claves)
         service = build('drive', 'v3', credentials=creds)
         
+        # Metadatos simplificados para evitar que Google asigne cuota al bot
         file_metadata = {
             'name': nombre_archivo, 
             'parents': [ID_CARPETA]
         }
         
-        # Convertimos el contenido a Bytes
-        media_content = archivo_subido.getvalue()
+        # Usamos uploadType=media (directo) para archivos pequeños/medianos
+        # Esto suele saltarse el bloqueo de cuota en carpetas compartidas
         media = MediaIoBaseUpload(
-            io.BytesIO(media_content), 
+            io.BytesIO(archivo_subido.getvalue()), 
             mimetype=archivo_subido.type,
-            resumable=True
+            resumable=False
         )
         
-        # Intentamos la creación con 'supportsAllDrives=True' 
-        # Esto permite que el archivo use el espacio de la carpeta madre (la tuya)
         file = service.files().create(
             body=file_metadata, 
             media_body=media, 
-            fields='id, webViewLink',
-            supportsAllDrives=True 
-        ).execute()
-        
-        # Inmediatamente damos permiso de lectura
-        service.permissions().create(
-            fileId=file.get('id'),
-            body={'type': 'anyone', 'role': 'reader'},
-            supportsAllDrives=True
+            fields='id, webViewLink'
         ).execute()
         
         return file.get('webViewLink')
     except Exception as e:
         st.error(f"Error en Drive: {e}")
-        # Si el error 403 persiste, es porque la cuenta de servicio 
-        # NECESITA ser parte de una Unidad Compartida o tener delegación.
-        return "ERROR_CUOTA_GOOGLE"
+        return "ERROR_DE_CUOTA"
 
 # --- CONEXIÓN A SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -90,7 +79,7 @@ if menu == "Registro de Pacientes":
                     "Foto": link_foto_perfil
                 }])
                 conn.update(worksheet="Pacientes", data=nuevo)
-                st.success(f"✅ Registro completado con éxito.")
+                st.success("✅ Registro completado.")
                 st.cache_data.clear()
             else:
                 st.error("Nombre y Cédula son obligatorios.")
@@ -127,7 +116,7 @@ elif menu == "Evolución de Pacientes":
                         "Link_Foto": link_ev
                     }])
                     conn.update(worksheet="Consultas", data=nueva_ev)
-                    st.success(f"✅ Evolución guardada correctamente.")
+                    st.success("✅ Evolución guardada exitosamente.")
                     st.cache_data.clear()
 
 # --- MÓDULO 3: FACTURACIÓN ---
