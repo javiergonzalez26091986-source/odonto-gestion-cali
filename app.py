@@ -3,7 +3,6 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import datetime
 import os
-# Librerías necesarias para la nueva forma de subida
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.oauth2 import service_account
@@ -29,34 +28,36 @@ def cargar_datos():
 
 df_pacientes, df_consultas, df_factura = cargar_datos()
 
-# --- FUNCIÓN PARA SUBIR A DRIVE (VERSIÓN DEFINITIVA) ---
+# --- FUNCIÓN PARA SUBIR A DRIVE (CORRECCIÓN DE CUOTA) ---
 def subir_a_drive(archivo_subido, nombre_archivo):
     try:
-        # 1. Preparar credenciales desde Secrets
         creds_info = st.secrets["connections"]["gsheets"]
         creds = service_account.Credentials.from_service_account_info(creds_info)
-        
-        # 2. Construir el servicio de Google Drive
         service = build('drive', 'v3', credentials=creds)
         
-        # 3. Guardar archivo temporalmente para la subida
         temp_path = f"temp_{nombre_archivo}"
         with open(temp_path, "wb") as f:
             f.write(archivo_subido.getbuffer())
         
-        # 4. Configurar metadatos y subir
         file_metadata = {
             'name': nombre_archivo,
             'parents': [ID_CARPETA_DRIVE]
         }
-        media = MediaFileUpload(temp_path, mimetype='image/jpeg')
         
-        service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        # El error 403 ocurre porque el Service Account intenta usar su propio espacio.
+        # Al estar la carpeta compartida con permisos de Editor, debería usar el espacio del dueño.
+        media = MediaFileUpload(temp_path, mimetype='image/jpeg', resumable=True)
         
-        # 5. Limpieza
+        file = service.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields='id'
+        ).execute()
+        
         os.remove(temp_path)
         return True
     except Exception as e:
+        # Si el error persiste, es un tema de permisos en la carpeta de Drive
         st.error(f"Error en Drive: {e}")
         return False
 
