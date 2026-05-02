@@ -3,8 +3,9 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import datetime
 import os
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
+# Librerías necesarias para la nueva forma de subida
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 from google.oauth2 import service_account
 
 # --- CONFIGURACIÓN INICIAL ---
@@ -19,7 +20,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def cargar_datos():
     try:
-        # Cargamos las pestañas necesarias del Excel
         pacientes = conn.read(worksheet="Pacientes", ttl=0)
         consultas = conn.read(worksheet="Consultas", ttl=0)
         facturacion = conn.read(worksheet="Facturacion", ttl=0)
@@ -29,35 +29,31 @@ def cargar_datos():
 
 df_pacientes, df_consultas, df_factura = cargar_datos()
 
-# --- FUNCIÓN PARA SUBIR A DRIVE (CORREGIDA) ---
+# --- FUNCIÓN PARA SUBIR A DRIVE (VERSIÓN DEFINITIVA) ---
 def subir_a_drive(archivo_subido, nombre_archivo):
     try:
-        scope = ['https://www.googleapis.com/auth/drive']
-        # Leemos desde st.secrets para evitar el archivo físico credentials.json
+        # 1. Preparar credenciales desde Secrets
         creds_info = st.secrets["connections"]["gsheets"]
-        creds = service_account.Credentials.from_service_account_info(
-            creds_info, scopes=scope)
+        creds = service_account.Credentials.from_service_account_info(creds_info)
         
-        # --- SOLUCIÓN AL ERROR 'access_token_expired' ---
-        # Definimos manualmente el atributo que PyDrive2 busca
-        creds.access_token_expired = False 
+        # 2. Construir el servicio de Google Drive
+        service = build('drive', 'v3', credentials=creds)
         
-        gauth = GoogleAuth()
-        gauth.credentials = creds
-        drive = GoogleDrive(gauth)
-        
-        f = drive.CreateFile({
-            'title': nombre_archivo,
-            'parents': [{'id': ID_CARPETA_DRIVE}]
-        })
-        
-        # Buffer temporal para la subida
+        # 3. Guardar archivo temporalmente para la subida
         temp_path = f"temp_{nombre_archivo}"
-        with open(temp_path, "wb") as tmp:
-            tmp.write(archivo_subido.getbuffer())
+        with open(temp_path, "wb") as f:
+            f.write(archivo_subido.getbuffer())
         
-        f.SetContentFile(temp_path)
-        f.Upload()
+        # 4. Configurar metadatos y subir
+        file_metadata = {
+            'name': nombre_archivo,
+            'parents': [ID_CARPETA_DRIVE]
+        }
+        media = MediaFileUpload(temp_path, mimetype='image/jpeg')
+        
+        service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        
+        # 5. Limpieza
         os.remove(temp_path)
         return True
     except Exception as e:
@@ -108,7 +104,6 @@ elif menu == "Evolución de Pacientes":
         paciente_sel = st.selectbox("Seleccione el Paciente", [""] + nombres_lista)
         
         if paciente_sel != "":
-            # Obtener datos y cédula para el historial
             datos_p = df_pacientes[df_pacientes['Nombre'] == paciente_sel].iloc[0]
             cedula_p = str(datos_p['Cédula']).split('.')[0]
             
@@ -127,7 +122,6 @@ elif menu == "Evolución de Pacientes":
 
             with col_img:
                 st.subheader("📸 Galería en Drive")
-                # Visor de la carpeta compartida
                 st.markdown(f'<iframe src="https://drive.google.com/embeddedfolderview?id={ID_CARPETA_DRIVE}#grid" width="100%" height="400" frameborder="0"></iframe>', unsafe_allow_html=True)
 
             st.divider()
