@@ -6,3 +6,4 @@ google-auth
 Pillow
 PyDrive2
 google-api-python-client
+google-auth
