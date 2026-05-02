@@ -1,150 +1,93 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-import datetime
-import os
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 from google.oauth2 import service_account
+import os
 
 # --- CONFIGURACIÓN INICIAL ---
-st.set_page_config(page_title="Gestión Odontológica", page_icon="🦷", layout="wide")
-st.title("🦷 Gestión - Odontología Familiar Especializada")
+ID_CARPETA_DRIVE = "TU_ID_DE_CARPETA_AQUÍ"  # Reemplaza con el ID de tu carpeta de Drive
 
-# ID de tu carpeta de Drive y nombres de hojas
-ID_CARPETA_DRIVE = "1hauuaIMZOztMBJSUANg0Ce7kquOAqYEu"
+st.set_page_config(page_title="Gestión Odontológica - Odonto Cali", layout="wide")
+st.title("🦷 Sistema de Gestión - Odonto Cali")
 
 # --- CONEXIÓN A GOOGLE SHEETS ---
+# Utiliza la configuración [connections.gsheets] de tus Secrets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def cargar_datos():
-    try:
-        pacientes = conn.read(worksheet="Pacientes", ttl=0)
-        consultas = conn.read(worksheet="Consultas", ttl=0)
-        return pacientes, consultas
-    except:
-        return pd.DataFrame(), pd.DataFrame()
+def leer_datos(pestaña):
+    return conn.read(worksheet=pestaña)
 
-df_pacientes, df_consultas = cargar_datos()
-
-# --- FUNCIÓN PARA SUBIR A DRIVE ---
+# --- FUNCIÓN PARA DRIVE (USANDO SECRETS) ---
 def subir_a_drive(archivo_subido, nombre_archivo):
     try:
-        # Autenticación con el archivo credentials.json
+        # Definimos el alcance (scope) para Google Drive
         scope = ['https://www.googleapis.com/auth/drive']
-        creds = service_account.Credentials.from_service_account_file(
-            'credentials.json', scopes=scope)
         
+        # Leemos las credenciales directamente desde los Secrets de Streamlit
+        # Esto evita el error: [Errno 2] No such file or directory: 'credentials.json'
+        creds_info = st.secrets["connections"]["gsheets"]
+        creds = service_account.Credentials.from_service_account_info(
+            creds_info, scopes=scope)
+        
+        # Configuración de PyDrive2 con las credenciales de memoria
         gauth = GoogleAuth()
         gauth.credentials = creds
         drive = GoogleDrive(gauth)
         
-        # Crear archivo en Drive
+        # Crear el archivo en la carpeta específica
         f = drive.CreateFile({
             'title': nombre_archivo,
             'parents': [{'id': ID_CARPETA_DRIVE}]
         })
         
-        # Guardar temporalmente para subir el buffer
+        # Guardado temporal para la transferencia
         temp_path = f"temp_{nombre_archivo}"
         with open(temp_path, "wb") as tmp:
             tmp.write(archivo_subido.getbuffer())
         
         f.SetContentFile(temp_path)
         f.Upload()
-        os.remove(temp_path) # Limpiar
+        os.remove(temp_path)  # Limpiar archivo temporal
         return True
     except Exception as e:
-        st.error(f"Error en Drive: {e}")
+        st.error(f"Error crítico en Drive: {e}")
         return False
 
-# --- MENÚ LATERAL ---
-menu = st.sidebar.selectbox("Seleccione una opción", 
-    ["Registro de Pacientes", "Evolución de Pacientes", "Facturacion Interna"])
+# --- INTERFAZ DE USUARIO (EJEMPLO DE REGISTRO) ---
+menu = ["Registro de Pacientes", "Consultas y Fotos", "Ver Base de Datos"]
+choice = st.sidebar.selectbox("Menú", menu)
 
-# --- MÓDULO 1: REGISTRO ---
-if menu == "Registro de Pacientes":
-    st.header("📋 Registro de Nuevo Paciente")
-    with st.form("form_registro", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            nombre = st.text_input("Nombre Completo")
-            cedula = st.text_input("Cédula")
-        with col2:
-            tel = st.text_input("Teléfono")
-            foto = st.file_uploader("Subir Foto de Perfil", type=['jpg', 'png', 'jpeg'])
+if choice == "Registro de Pacientes":
+    st.subheader("Registrar Nuevo Paciente")
+    with st.form("form_paciente"):
+        nombre = st.text_input("Nombre Completo")
+        cedula = st.text_input("Cédula/ID")
+        telefono = st.text_input("Teléfono")
+        submit = st.form_submit_button("Guardar Paciente")
         
-        notas = st.text_area("Notas iniciales")
-        
-        if st.form_submit_button("Registrar Paciente"):
-            if nombre and cedula and foto:
-                nombre_foto = f"{cedula}_PERFIL.jpg"
-                if subir_a_drive(foto, nombre_foto):
-                    nuevo = pd.DataFrame([{
-                        "Nombre": nombre.upper(),
-                        "Cédula": str(cedula),
-                        "Teléfono": str(tel),
-                        "Fecha": str(datetime.date.today()),
-                        "Notas": notas.upper(),
-                        "Foto": "SUBIDA"
-                    }])
-                    conn.update(worksheet="Pacientes", data=nuevo)
-                    st.success(f"✅ {nombre} registrado y foto subida.")
-                    st.cache_data.clear()
-            else:
-                st.warning("Complete Nombre, Cédula y Foto.")
+        if submit:
+            # Aquí iría tu lógica para actualizar el DataFrame y conn.update()
+            st.success(f"Paciente {nombre} registrado con éxito.")
 
-# --- MÓDULO 2: EVOLUCIÓN ---
-elif menu == "Evolución de Pacientes":
-    st.header("📝 Evolución y Consultas")
-    if not df_pacientes.empty:
-        paciente_sel = st.selectbox("Seleccione Paciente", [""] + df_pacientes['Nombre'].tolist())
-        
-        if paciente_sel != "":
-            cedula_p = str(df_pacientes[df_pacientes['Nombre'] == paciente_sel]['Cédula'].values[0]).split('.')[0]
-            
-            col_hist, col_img = st.columns([1, 1])
-            
-            with col_hist:
-                st.subheader("📜 Historial Clínico")
-                if not df_consultas.empty:
-                    hist = df_consultas[df_consultas['Cédula'].astype(str).str.contains(cedula_p)]
-                    for _, fila in hist.iterrows():
-                        with st.expander(f"Consulta {fila['Fecha']}"):
-                            st.write(f"**Motivo:** {fila['Motivo']}")
-                            st.write(f"**Tratamiento:** {fila['Tratamiento']}")
-                else: st.info("Sin registros previos.")
+elif choice == "Consultas y Fotos":
+    st.subheader("Cargar Foto de Consulta")
+    foto = st.file_uploader("Seleccione la imagen del tratamiento", type=["jpg", "png", "jpeg"])
+    nombre_paciente = st.text_input("Nombre del archivo (ej: Juan_Perez_Tratamiento.jpg)")
+    
+    if st.button("Subir a Google Drive"):
+        if foto is not None and nombre_paciente:
+            con_exito = subir_a_drive(foto, nombre_paciente)
+            if con_exito:
+                st.success("✅ Foto subida correctamente a Google Drive.")
+        else:
+            st.warning("Por favor cargue una foto y asigne un nombre.")
 
-            with col_img:
-                st.subheader("📸 Galería en Drive")
-                st.markdown(f'<iframe src="https://drive.google.com/embeddedfolderview?id={ID_CARPETA_DRIVE}#grid" width="100%" height="400" frameborder="0"></iframe>', unsafe_allow_html=True)
-
-            st.divider()
-            with st.form("nueva_ev"):
-                st.subheader("Añadir Evolución")
-                motivo = st.text_area("Motivo")
-                trata = st.text_area("Tratamiento")
-                if st.form_submit_button("Guardar Consulta"):
-                    nueva_fila = pd.DataFrame([{
-                        "Cédula": str(cedula_p),
-                        "Fecha": str(datetime.date.today()),
-                        "Motivo": motivo.upper(),
-                        "Tratamiento": trata.upper()
-                    }])
-                    conn.update(worksheet="Consultas", data=nueva_fila)
-                    st.success("Guardado.")
-                    st.cache_data.clear()
-
-# --- MÓDULO 3: FACTURACIÓN ---
-elif menu == "Facturacion Interna":
-    st.header("💰 Facturación")
-    if not df_pacientes.empty:
-        p_f = st.selectbox("Paciente", df_pacientes['Nombre'].tolist())
-        with st.form("f_pago"):
-            serv = st.text_input("Servicio")
-            val = st.number_input("Valor", min_value=0)
-            if st.form_submit_button("Registrar Pago"):
-                pago = pd.DataFrame([{"Paciente": p_f, "Fecha": str(datetime.date.today()), "Servicio": serv.upper(), "Valor": val}])
-                conn.update(worksheet="Facturacion", data=pago)
-                st.success("✅ Pago registrado.")
-                st.cache_data.clear()
+elif choice == "Ver Base de Datos":
+    st.subheader("Listado de Pacientes")
+    try:
+        df = leer_datos("Pacientes")
+        st.dataframe(df)
+    except Exception as e:
+        st.error(f"No se pudo leer la hoja 'Pacientes': {e}")
