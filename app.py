@@ -13,6 +13,8 @@ st.title("🦷 Gestión - Odontología Familiar Especializada")
 
 # ID de tu carpeta de Drive (FOTOS_ODONTOLOGIA)
 ID_CARPETA_DRIVE = "1hauuaIMZOztMBJSUANg0Ce7kquOAqYEu"
+# TU CORREO DE GOOGLE (El que es dueño de la carpeta)
+TU_CORREO = "tu_correo@gmail.com"  # <--- CAMBIA ESTO POR TU EMAIL REAL
 
 # --- CONEXIÓN A GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -28,7 +30,7 @@ def cargar_datos():
 
 df_pacientes, df_consultas, df_factura = cargar_datos()
 
-# --- FUNCIÓN PARA SUBIR A DRIVE (CORRECCIÓN DE CUOTA) ---
+# --- FUNCIÓN PARA SUBIR A DRIVE (SOLUCIÓN DEFINITIVA DE CUOTA) ---
 def subir_a_drive(archivo_subido, nombre_archivo):
     try:
         creds_info = st.secrets["connections"]["gsheets"]
@@ -44,20 +46,33 @@ def subir_a_drive(archivo_subido, nombre_archivo):
             'parents': [ID_CARPETA_DRIVE]
         }
         
-        # El error 403 ocurre porque el Service Account intenta usar su propio espacio.
-        # Al estar la carpeta compartida con permisos de Editor, debería usar el espacio del dueño.
         media = MediaFileUpload(temp_path, mimetype='image/jpeg', resumable=True)
         
+        # 1. Crear el archivo
         file = service.files().create(
             body=file_metadata, 
             media_body=media, 
             fields='id'
         ).execute()
         
+        file_id = file.get('id')
+
+        # 2. TRANSFERIR PROPIEDAD (Para usar tu cuota de espacio)
+        permission = {
+            'type': 'user',
+            'role': 'owner',
+            'emailAddress': TU_CORREO
+        }
+        # transferOwnership=True es vital aquí
+        service.permissions().create(
+            fileId=file_id, 
+            body=permission, 
+            transferOwnership=True
+        ).execute()
+        
         os.remove(temp_path)
         return True
     except Exception as e:
-        # Si el error persiste, es un tema de permisos en la carpeta de Drive
         st.error(f"Error en Drive: {e}")
         return False
 
@@ -92,7 +107,7 @@ if menu == "Registro de Pacientes":
                         "Foto": "SUBIDA"
                     }])
                     conn.update(worksheet="Pacientes", data=nuevo)
-                    st.success(f"✅ {nombre} registrado y foto guardada.")
+                    st.success(f"✅ {nombre} registrado correctamente.")
                     st.cache_data.clear()
             else:
                 st.warning("Complete Nombre, Cédula y Foto.")
@@ -119,7 +134,7 @@ elif menu == "Evolución de Pacientes":
                             with st.expander(f"Fecha: {fila['Fecha']}"):
                                 st.write(f"**Motivo:** {fila['Motivo']}")
                                 st.write(f"**Tratamiento:** {fila['Tratamiento']}")
-                    else: st.info("No hay evoluciones para este paciente.")
+                    else: st.info("No hay evoluciones.")
 
             with col_img:
                 st.subheader("📸 Galería en Drive")
@@ -129,9 +144,9 @@ elif menu == "Evolución de Pacientes":
             with st.form("nueva_ev"):
                 st.subheader("Registrar Nueva Evolución")
                 f_ev = st.date_input("Fecha", datetime.date.today())
-                motivo = st.text_area("Motivo de consulta")
-                trata = st.text_area("Tratamiento realizado")
-                if st.form_submit_button("Guardar Evolución"):
+                motivo = st.text_area("Motivo")
+                trata = st.text_area("Tratamiento")
+                if st.form_submit_button("Guardar"):
                     nueva_fila = pd.DataFrame([{
                         "Cédula": str(cedula_p),
                         "Fecha": str(f_ev),
@@ -139,17 +154,17 @@ elif menu == "Evolución de Pacientes":
                         "Tratamiento": trata.upper()
                     }])
                     conn.update(worksheet="Consultas", data=nueva_fila)
-                    st.success("✅ Evolución guardada correctamente.")
+                    st.success("✅ Guardado.")
                     st.cache_data.clear()
 
 # --- MÓDULO 3: FACTURACIÓN ---
 elif menu == "Facturacion Interna":
     st.header("💰 Facturación Interna")
     if not df_pacientes.empty:
-        p_f = st.selectbox("Seleccione Paciente para Cobro", df_pacientes['Nombre'].tolist())
+        p_f = st.selectbox("Paciente", df_pacientes['Nombre'].tolist())
         with st.form("f_pago"):
-            servicio = st.text_input("Servicio / Procedimiento")
-            valor = st.number_input("Valor del Procedimiento", min_value=0, step=1000)
+            servicio = st.text_input("Servicio")
+            valor = st.number_input("Valor", min_value=0, step=1000)
             if st.form_submit_button("Registrar Pago"):
                 pago = pd.DataFrame([{
                     "Paciente": p_f, 
@@ -158,5 +173,5 @@ elif menu == "Facturacion Interna":
                     "Valor": valor
                 }])
                 conn.update(worksheet="Facturacion", data=pago)
-                st.success(f"✅ Pago de {p_f} registrado con éxito.")
+                st.success("✅ Pago registrado.")
                 st.cache_data.clear()
