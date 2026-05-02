@@ -14,7 +14,7 @@ st.title("🦷 Gestión - Odontología Familiar Especializada")
 # ID de la carpeta de Drive proporcionada
 ID_CARPETA = "1hauuaIMZOztMBJSUANg0Ce7kquOAqYEu"
 
-# --- FUNCIÓN DE SUBIDA A DRIVE CORREGIDA (EVITA ERROR 403) ---
+# --- FUNCIÓN DE SUBIDA A DRIVE (ESTRATEGIA DE CUOTA COMPARTIDA) ---
 def subir_archivo_drive(archivo_subido, nombre_archivo):
     try:
         info_claves = st.secrets["connections"]["gsheets"]
@@ -29,13 +29,20 @@ def subir_archivo_drive(archivo_subido, nombre_archivo):
         media = MediaIoBaseUpload(
             io.BytesIO(archivo_subido.getvalue()), 
             mimetype=archivo_subido.type,
-            resumable=True
+            resumable=False  # Cambiado a False para evitar conflictos de cuota en uploads pequeños
         )
         
+        # Intentar crear el archivo
         file = service.files().create(
             body=file_metadata, 
             media_body=media, 
             fields='id, webViewLink'
+        ).execute()
+        
+        # PASO ADICIONAL: Darle permiso a cualquier persona con el link para asegurar visualización
+        service.permissions().create(
+            fileId=file.get('id'),
+            body={'type': 'anyone', 'role': 'reader'}
         ).execute()
         
         return file.get('webViewLink')
@@ -64,7 +71,7 @@ if menu == "Registro de Pacientes":
             if nombre and cedula:
                 link_foto_perfil = "SIN FOTO"
                 if foto_perfil:
-                    with st.spinner("Subiendo foto de perfil..."):
+                    with st.spinner("Subiendo foto..."):
                         nombre_f = f"Perfil_{cedula}_{datetime.date.today()}.jpg"
                         link_foto_perfil = subir_archivo_drive(foto_perfil, nombre_f)
                 
@@ -77,7 +84,7 @@ if menu == "Registro de Pacientes":
                     "Foto": link_foto_perfil
                 }])
                 conn.update(worksheet="Pacientes", data=nuevo)
-                st.success(f"✅ Paciente registrado.")
+                st.success(f"✅ Registro completado.")
                 st.cache_data.clear()
             else:
                 st.error("Nombre y Cédula son obligatorios.")
@@ -101,7 +108,7 @@ elif menu == "Evolución de Pacientes":
                 if st.form_submit_button("Guardar Evolución"):
                     link_ev = "SIN FOTO"
                     if foto_ev:
-                        with st.spinner("Subiendo evidencia a Drive..."):
+                        with st.spinner("Subiendo evidencia..."):
                             nombre_ev = f"Evid_{cedula_p}_{f_ev}.jpg"
                             link_ev = subir_archivo_drive(foto_ev, nombre_ev)
                     
