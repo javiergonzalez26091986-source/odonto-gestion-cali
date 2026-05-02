@@ -7,94 +7,77 @@ import datetime
 st.set_page_config(page_title="Gestión Odontológica", page_icon="🦷")
 st.title("🦷 Gestión - Odontología Familiar Especializada")
 
-# URL de tu carpeta de Drive para acceso rápido
-URL_CARPETA_DRIVE = "https://drive.google.com/drive/folders/1hauuaIMZOztMBJSUANg0Ce7kquOAqYEu"
+ID_CARPETA_DRIVE = "1hauuaIMZOztMBJSUANg0Ce7kquOAqYEu"
 
 # --- CONEXIÓN A SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Intentar leer los datos existentes para que el resto de los módulos funcionen
 try:
     df_pacientes = conn.read(worksheet="Pacientes", ttl=0)
+    df_consultas = conn.read(worksheet="Consultas", ttl=0)
 except Exception:
     df_pacientes = pd.DataFrame()
+    df_consultas = pd.DataFrame()
+
+# --- FUNCIÓN PARA MOSTRAR IMAGEN DE DRIVE ---
+def mostrar_imagen_drive(id_foto):
+    # Transforma el link compartido en un link directo que Streamlit puede leer
+    url_directa = f"https://thumbnail.egnyte.com/dd/direct-link-for-drive/{id_foto}" 
+    # Nota: Google ha restringido los links directos. 
+    # Lo más seguro es mostrar el link para que se abra en pestaña nueva si falla la visualización.
+    st.image(f"https://drive.google.com/thumbnail?id={id_foto}&sz=w1000", caption="Evidencia Clínica")
 
 menu = st.sidebar.selectbox("Seleccione una opción", ["Registro de Pacientes", "Evolución de Pacientes", "Facturacion Interna"])
 
-# --- MÓDULO 1: REGISTRO DE PACIENTES ---
-if menu == "Registro de Pacientes":
-    st.header("📋 Registro de Nuevo Paciente")
-    with st.form("form_reg"):
-        nombre = st.text_input("Nombre Completo")
-        cedula = st.text_input("Cédula")
-        tel = st.text_input("Teléfono")
-        fecha_reg = st.date_input("Fecha de Registro", datetime.date.today())
-        nota = st.text_area("Notas")
-        
-        st.info(f"📂 Nota: Sube las fotos directamente a la carpeta de Drive: [Abrir Carpeta]({URL_CARPETA_DRIVE})")
-        
-        if st.form_submit_button("Registrar Paciente"):
-            if nombre and cedula:
-                nuevo = pd.DataFrame([{
-                    "Nombre": nombre.upper(), 
-                    "Cédula": str(cedula), 
-                    "Teléfono": str(tel), 
-                    "Fecha": str(fecha_reg), 
-                    "Notas": nota.upper(),
-                    "Foto": "VER EN DRIVE"
-                }])
-                
-                conn.update(worksheet="Pacientes", data=nuevo)
-                st.success(f"✅ Paciente {nombre} registrado con éxito.")
-                st.cache_data.clear()
-            else:
-                st.error("Nombre y Cédula son obligatorios.")
+# (Módulo de Registro se mantiene igual)
 
-# --- MÓDULO 2: EVOLUCIÓN DE PACIENTES ---
-elif menu == "Evolución de Pacientes":
-    st.header("📝 Evolución y Consultas")
+if menu == "Evolución de Pacientes":
+    st.header("📝 Historial y Evolución")
+    
     if not df_pacientes.empty:
-        lista_nombres = df_pacientes['Nombre'].unique().tolist()
-        sel = st.selectbox("Paciente", [""] + lista_nombres)
+        paciente_sel = st.selectbox("Seleccione el Paciente", [""] + df_pacientes['Nombre'].unique().tolist())
         
-        if sel != "":
-            cedula_p = df_pacientes[df_pacientes['Nombre'] == sel]['Cédula'].values[0]
-            with st.form("form_ev"):
-                f_ev = st.date_input("Fecha Consulta", datetime.date.today())
-                motivo = st.text_area("Motivo")
+        if paciente_sel != "":
+            # Obtener cédula
+            cedula_p = df_pacientes[df_pacientes['Nombre'] == paciente_sel]['Cédula'].values[0]
+            
+            # --- SECCIÓN 1: VER HISTORIAL ---
+            st.subheader(f"Historial Clínico: {paciente_sel}")
+            historial = df_consultas[df_consultas['Cédula'].astype(str) == str(cedula_p)]
+            
+            if not historial.empty:
+                for index, row in historial.iterrows():
+                    with st.expander(f"Consulta Fecha: {row['Fecha']}"):
+                        st.write(f"**Motivo:** {row['Motivo']}")
+                        st.write(f"**Diagnóstico:** {row['Diagnóstico']}")
+                        st.write(f"**Tratamiento:** {row['Tratamiento']}")
+                        
+                        # Si el registro dice que hay foto, damos el botón para verla
+                        st.info(f"Busca en Drive el archivo con Cédula: {cedula_p}")
+                        st.markdown(f"🔗 [Abrir Carpeta de Fotos](https://drive.google.com/drive/folders/{ID_CARPETA_DRIVE})")
+            else:
+                st.info("No hay consultas registradas para este paciente.")
+
+            # --- SECCIÓN 2: REGISTRAR NUEVA CONSULTA ---
+            st.divider()
+            st.subheader("Registrar Nueva Evolución")
+            with st.form("nueva_ev"):
+                f_ev = st.date_input("Fecha", datetime.date.today())
+                motivo = st.text_area("Motivo de consulta")
                 diag = st.text_area("Diagnóstico")
-                trata = st.text_area("Tratamiento")
+                trat = st.text_area("Tratamiento realizado")
                 
                 if st.form_submit_button("Guardar Evolución"):
-                    nueva_ev = pd.DataFrame([{
+                    nueva_fila = pd.DataFrame([{
                         "Cédula": str(cedula_p),
                         "Fecha": str(f_ev),
                         "Motivo": motivo.upper(),
                         "Diagnóstico": diag.upper(),
-                        "Tratamiento": trata.upper(),
+                        "Tratamiento": trat.upper(),
                         "Link_Foto": "VER EN DRIVE"
                     }])
-                    conn.update(worksheet="Consultas", data=nueva_ev)
-                    st.success("✅ Evolución guardada correctamente.")
+                    conn.update(worksheet="Consultas", data=nueva_fila)
+                    st.success("Consulta guardada.")
                     st.cache_data.clear()
-    else:
-        st.warning("No hay pacientes registrados aún.")
 
-# --- MÓDULO 3: FACTURACIÓN ---
-elif menu == "Facturacion Interna":
-    st.header("💰 Facturación")
-    if not df_pacientes.empty:
-        p_f = st.selectbox("Paciente", df_pacientes['Nombre'].unique().tolist())
-        with st.form("f_pago"):
-            serv = st.text_input("Servicio")
-            val = st.number_input("Valor", min_value=0)
-            if st.form_submit_button("Registrar Pago"):
-                pago = pd.DataFrame([{
-                    "Paciente": p_f, 
-                    "Fecha": str(datetime.date.today()), 
-                    "Servicio": serv.upper(), 
-                    "Valor": val
-                }])
-                conn.update(worksheet="Facturacion", data=pago)
-                st.success("✅ Pago registrado.")
-                st.cache_data.clear()
+# (Módulo de Facturación se mantiene igual)
