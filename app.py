@@ -4,26 +4,44 @@ import pandas as pd
 import datetime
 import cloudinary
 import cloudinary.uploader
+import base64
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Odonto-Cali", page_icon="🦷", layout="wide")
 
-# --- ESTILOS CSS PERSONALIZADOS (Para que los botones resalten) ---
+# --- 1. FUNCIÓN PARA EL LOGO LOCAL (Base64) ---
+# Esta función permite que el logo viva dentro del programa y no dependa de internet
+def get_base64_logo(path):
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except:
+        return None
+
+# Cargamos el logo localmente
+logo_base64 = get_base64_logo("logo_odontología_familiar.jpg")
+
+# --- ESTILOS CSS PERSONALIZADOS (Botones profesionales) ---
 st.markdown("""
     <style>
     div.stButton > button {
         width: 100%;
-        border-radius: 5px;
-        height: 3em;
-        background-color: #262730;
+        border-radius: 8px;
+        height: 3.5em;
+        background-color: #1E1E1E;
         color: white;
-        border: 1px solid #464855;
+        border: 1px solid #3d3d3d;
         text-align: left;
         padding-left: 20px;
+        font-weight: 500;
+        transition: all 0.3s ease;
     }
     div.stButton > button:hover {
-        border-color: #FF4B4B;
-        color: #FF4B4B;
+        border-color: #00AEEF;
+        color: #00AEEF;
+        background-color: #262626;
+        transform: translateX(5px);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -47,14 +65,25 @@ def subir_a_cloudinary(archivo):
         st.error(f"Error en Cloudinary: {e}")
         return None
 
-# --- LÓGICA DE NAVEGACIÓN PROFESIONAL ---
+# --- LÓGICA DE NAVEGACIÓN ---
 if 'menu_actual' not in st.session_state:
     st.session_state.menu_actual = "Registro de Pacientes"
 
 with st.sidebar:
-    st.title("🦷 Odonto-Cali")
-    st.markdown("---")
-    st.write("**SELECCIONE UN MÓDULO:**")
+    # Mostramos el Logo usando el código Base64 generado arriba
+    if logo_base64:
+        st.markdown(
+            f"""
+            <div style="display: flex; justify-content: center; padding-bottom: 20px;">
+                <img src="data:image/jpeg;base64,{logo_base64}" style="width: 100%; border-radius: 10px;">
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+    else:
+        st.title("🦷 Odonto-Cali")
+    
+    st.write("**MENÚ DE GESTIÓN**")
     
     if st.button("📋 Registro de Pacientes"):
         st.session_state.menu_actual = "Registro de Pacientes"
@@ -69,9 +98,9 @@ with st.sidebar:
         st.session_state.menu_actual = "Configuración"
         
     st.markdown("---")
-    st.caption("Versión 1.4 - Gestión Odontológica")
+    st.caption("Odontología Familiar Especializada v1.6")
 
-# Capturamos la selección para mostrar el contenido
+# Seleccionamos el módulo a mostrar
 menu = st.session_state.menu_actual
 
 # ---------------------------------------------------------
@@ -130,25 +159,28 @@ elif menu == "Evolución y Galería":
                         url_foto = row.get('Foto', None)
                         if url_foto and str(url_foto) != 'nan':
                             st.image(url_foto, use_container_width=True)
+                        else:
+                            st.info("Sin fotografía")
                     with c2:
                         st.write(f"**Teléfono:** {row.get('Teléfono', 'N/D')}")
                         st.write(f"**EPS:** {row.get('EPS', 'N/D')}")
                         st.write(f"**Observaciones:** {row.get('Observaciones', 'N/D')}")
+                        st.write(f"**Registrado el:** {row.get('Fecha_Registro', 'N/D')}")
         else:
-            st.info("No hay registros.")
-    except:
-        st.error("Error al conectar con la base de datos.")
+            st.info("No hay registros en la base de datos.")
+    except Exception as e:
+        st.error(f"Error al conectar con la base de datos: {e}")
 
 # ---------------------------------------------------------
 # MÓDULO 3: AGENDA DE CITAS
 # ---------------------------------------------------------
 elif menu == "Agenda de Citas":
     st.header("📅 Calendario de Citas")
-    st.info("Módulo en construcción.")
+    st.info("Este módulo permitirá agendar futuras consultas.")
 
 # ---------------------------------------------------------
 # MÓDULO 4: CONFIGURACIÓN
 # ---------------------------------------------------------
 elif menu == "Configuración":
     st.header("⚙️ Configuración")
-    st.write("Base de Datos y Cloudinary: ✅ Operativos")
+    st.write("Sistemas de Google Sheets y Cloudinary: ✅ Operativos")
