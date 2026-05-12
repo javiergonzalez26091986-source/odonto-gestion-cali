@@ -37,7 +37,7 @@ with st.sidebar:
         index=0
     )
     st.markdown("---")
-    st.info("Versión 1.2 - Gestión Odontológica")
+    st.info("Versión 1.3 - Gestión Odontológica")
 
 # ---------------------------------------------------------
 # MÓDULO 1: REGISTRO DE PACIENTES
@@ -77,30 +77,44 @@ if menu == "Registro de Pacientes":
                 st.warning("Nombre, Cédula y Foto son campos obligatorios.")
 
 # ---------------------------------------------------------
-# MÓDULO 2: EVOLUCIÓN Y GALERÍA
+# MÓDULO 2: EVOLUCIÓN Y GALERÍA (Aquí corregimos el KeyError)
 # ---------------------------------------------------------
 elif menu == "Evolución y Galería":
     st.title("📂 Historial y Evolución")
-    df = conn.read(worksheet="Pacientes", ttl=0)
-    
-    if not df.empty:
-        busqueda = st.text_input("🔍 Buscar por Nombre o Cédula").upper()
-        if busqueda:
-            df = df[df['Nombre'].str.contains(busqueda) | df['Cédula'].astype(str).str.contains(busqueda)]
+    try:
+        # Forzamos la lectura fresca del Excel
+        df = conn.read(worksheet="Pacientes", ttl=0)
         
-        for index, row in df.iterrows():
-            with st.expander(f"👤 {row['Nombre']} (CC: {row['Cédula']})"):
-                c1, c2 = st.columns([1, 2])
-                with c1:
-                    if row['Foto']:
-                        st.image(row['Foto'], caption="Registro Fotográfico")
-                with c2:
-                    st.write(f"**Teléfono:** {row['Teléfono']}")
-                    st.write(f"**EPS:** {row['EPS']}")
-                    st.write(f"**Fecha de Registro:** {row['Fecha_Registro']}")
-                    st.write(f"**Observaciones:** {row['Observaciones']}")
-    else:
-        st.info("No hay pacientes registrados en la base de datos.")
+        if not df.empty:
+            busqueda = st.text_input("🔍 Buscar por Nombre o Cédula").upper()
+            if busqueda:
+                # Filtro seguro por nombre o cédula
+                df = df[df['Nombre'].str.contains(busqueda, na=False) | df['Cédula'].astype(str).str.contains(busqueda, na=False)]
+            
+            for index, row in df.iterrows():
+                # .get('Nombre', 'N/A') evita que la app se rompa si falta la columna
+                nombre_p = row.get('Nombre', 'Sin nombre')
+                cedula_p = row.get('Cédula', 'Sin ID')
+                
+                with st.expander(f"👤 {nombre_p} (CC: {cedula_p})"):
+                    c1, c2 = st.columns([1, 2])
+                    with c1:
+                        # Verificamos si existe la columna 'Foto' y si tiene contenido
+                        url_foto = row.get('Foto', None)
+                        if url_foto and str(url_foto) != 'nan':
+                            st.image(url_foto, caption="Registro Fotográfico")
+                        else:
+                            st.warning("No hay foto disponible.")
+                    with c2:
+                        # Usamos .get() para todas las columnas dudosas
+                        st.write(f"**Teléfono:** {row.get('Teléfono', 'N/D')}")
+                        st.write(f"**EPS:** {row.get('EPS', 'N/D')}")
+                        st.write(f"**Fecha de Registro:** {row.get('Fecha_Registro', 'N/D')}")
+                        st.write(f"**Observaciones:** {row.get('Observaciones', 'Sin observaciones registradas')}")
+        else:
+            st.info("No hay pacientes registrados en la base de datos.")
+    except Exception as e:
+        st.error(f"Error al cargar la base de datos: {e}")
 
 # ---------------------------------------------------------
 # MÓDULO 3: AGENDA DE CITAS
