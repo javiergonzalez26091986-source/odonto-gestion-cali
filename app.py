@@ -20,7 +20,7 @@ def get_base64_logo(path):
 
 logo_base64 = get_base64_logo("logo_odontología_familiar.jpg")
 
-# --- ESTILOS CSS PERSONALIZADOS ---
+# --- ESTILOS CSS PERSONALIZADOS (Botones y estética) ---
 st.markdown("""
     <style>
     div.stButton > button {
@@ -90,7 +90,7 @@ with st.sidebar:
     if st.button("⚙️ Configuración"):
         st.session_state.menu_actual = "Configuración"
     st.markdown("---")
-    st.caption("Odontología Familiar Especializada v1.8")
+    st.caption("v1.9 - Gestión Profesional")
 
 menu = st.session_state.menu_actual
 
@@ -109,16 +109,13 @@ if menu == "Registro de Pacientes":
             eps = st.text_input("EPS")
             fecha_nac = st.date_input("Fecha de Nacimiento", min_value=datetime.date(1940,1,1))
         
-        # AQUÍ ESTÁN TODOS LOS FORMATOS INCLUYENDO JFIF
-        foto = st.file_uploader(
-            "Foto Inicial / Rx / Documentos", 
-            type=['jpg', 'png', 'jpeg', 'jfif', 'webp', 'bmp', 'heic', 'pdf', 'tiff']
-        )
+        foto = st.file_uploader("Foto Inicial / Rx / Documentos", 
+                                type=['jpg', 'png', 'jpeg', 'jfif', 'webp', 'bmp', 'heic', 'pdf'])
         observaciones = st.text_area("Observaciones Iniciales")
         
         if st.form_submit_button("Guardar Paciente"):
             if nombre and cedula and foto:
-                with st.spinner("Subiendo datos e imagen..."):
+                with st.spinner("Guardando..."):
                     url_foto = subir_a_cloudinary(foto)
                     if url_foto:
                         nueva_fila = pd.DataFrame([{
@@ -131,9 +128,9 @@ if menu == "Registro de Pacientes":
                             "Fecha_Registro": str(datetime.date.today())
                         }])
                         conn.update(worksheet="Pacientes", data=nueva_fila)
-                        st.success(f"✅ Paciente {nombre} registrado exitosamente.")
+                        st.success(f"✅ Paciente {nombre} guardado.")
             else:
-                st.warning("Nombre, Cédula y Foto son obligatorios.")
+                st.warning("Complete Nombre, Cédula y Foto.")
 
 # ---------------------------------------------------------
 # MÓDULO 2: EVOLUCIÓN Y GALERÍA
@@ -151,85 +148,71 @@ elif menu == "Evolución y Galería":
                 with st.expander(f"👤 {row.get('Nombre', 'N/A')} (CC: {row.get('Cédula', 'N/A')})"):
                     c1, c2 = st.columns([1, 2])
                     with c1:
-                        url_foto = row.get('Foto', None)
-                        if url_foto and str(url_foto) != 'nan':
-                            if url_foto.lower().endswith('.pdf'):
-                                st.write("📄 Documento PDF guardado")
-                                st.link_button("Ver PDF", url_foto)
-                            else:
-                                st.image(url_foto, use_container_width=True)
+                        url_foto = row.get('Foto')
+                        if url_foto:
+                            st.image(url_foto, use_container_width=True)
                     with c2:
                         st.write(f"**Teléfono:** {row.get('Teléfono', 'N/D')}")
                         st.write(f"**Observaciones:** {row.get('Observaciones', 'N/D')}")
         else:
-            st.info("No hay registros.")
-    except Exception as e:
-        st.error(f"Error de conexión: {e}")
+            st.info("No hay pacientes registrados.")
+    except:
+        st.error("Error al leer la tabla de Pacientes.")
 
-elif menu == "Agenda de Citas":
-    st.header("📅 Agenda")
-    st.info("Módulo en desarrollo.")
-
-elif menu == "Configuración":
-    st.header("⚙️ Configuración")
-    st.write("**Formatos aceptados:** JPG, PNG, JFIF, WEBP, HEIC, PDF, entre otros.")
-    # ---------------------------------------------------------
-# MÓDULO 3: AGENDA DE CITAS (Actualizado)
+# ---------------------------------------------------------
+# MÓDULO 3: AGENDA DE CITAS (Nueva lógica corregida)
 # ---------------------------------------------------------
 elif menu == "Agenda de Citas":
     st.header("📅 Agenda de Citas")
     
-    # 1. Cargamos pacientes para el selector
+    # Intentar obtener lista de pacientes para el buscador
     try:
-        df_pacientes = conn.read(worksheet="Pacientes", ttl=0)
-        lista_pacientes = df_pacientes['Nombre'].tolist() if not df_pacientes.empty else []
+        df_p = conn.read(worksheet="Pacientes", ttl=0)
+        lista_nombres = df_p['Nombre'].tolist() if not df_p.empty else []
     except:
-        lista_pacientes = []
+        lista_nombres = []
 
-    tab1, tab2 = st.tabs(["➕ Agendar Nueva", "📋 Ver Agenda"])
+    t1, t2 = st.tabs(["➕ Agendar", "📋 Ver Citas"])
 
-    with tab1:
-        with st.form("form_cita"):
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                # El usuario elige de la lista de pacientes ya registrados
-                paciente_sel = st.selectbox("Seleccionar Paciente", lista_pacientes)
-                fecha_cita = st.date_input("Fecha de la Cita", min_value=datetime.date.today())
-            with col_c2:
-                hora_cita = st.time_input("Hora de la Cita", value=datetime.time(8, 0))
-                procedimiento = st.selectbox("Procedimiento", ["Valoración", "Limpieza", "Extracción", "Resina", "Ortodoncia", "Otro"])
+    with t1:
+        with st.form("nueva_cita"):
+            p_nombre = st.selectbox("Seleccione Paciente", options=lista_nombres)
+            f_cita = st.date_input("Fecha", min_value=datetime.date.today())
+            h_cita = st.time_input("Hora", value=datetime.time(8, 0))
+            proc = st.selectbox("Procedimiento", ["Valoración", "Limpieza", "Extracción", "Tratamiento", "Otro"])
+            obs_c = st.text_area("Notas")
             
-            notas_cita = st.text_area("Notas adicionales")
-            
-            if st.form_submit_button("Agendar Cita"):
-                if paciente_sel:
-                    # Buscamos la cédula del paciente seleccionado
-                    cedula_sel = df_pacientes[df_pacientes['Nombre'] == paciente_sel]['Cédula'].values[0]
-                    
-                    nueva_cita = pd.DataFrame([{
-                        "Paciente": paciente_sel,
-                        "Cédula": str(cedula_sel),
-                        "Fecha": str(fecha_cita),
-                        "Hora": str(hora_cita),
-                        "Procedimiento": procedimiento,
-                        "Observaciones": notas_cita,
+            if st.form_submit_button("Confirmar Cita"):
+                if p_nombre:
+                    # Traemos la cédula automáticamente
+                    p_cedula = df_p[df_p['Nombre'] == p_nombre]['Cédula'].values[0]
+                    df_cita = pd.DataFrame([{
+                        "Paciente": p_nombre,
+                        "Cédula": str(p_cedula),
+                        "Fecha": str(f_cita),
+                        "Hora": str(h_cita),
+                        "Procedimiento": proc,
+                        "Observaciones": obs_c,
                         "Estado": "PENDIENTE"
                     }])
-                    
-                    conn.update(worksheet="Citas", data=nueva_cita)
-                    st.success(f"✅ Cita agendada para {paciente_sel} el {fecha_cita}")
+                    conn.update(worksheet="Citas", data=df_cita)
+                    st.success(f"Cita agendada para {p_nombre}")
                 else:
-                    st.error("Primero debe registrar al paciente en el módulo de Registro.")
+                    st.error("Debe seleccionar un paciente registrado.")
 
-    with tab2:
-        st.subheader("Citas Programadas")
+    with t2:
         try:
-            df_citas = conn.read(worksheet="Citas", ttl=0)
-            if not df_citas.empty:
-                # Mostramos la tabla de citas
-                st.dataframe(df_citas, use_container_width=True)
+            df_c = conn.read(worksheet="Citas", ttl=0)
+            if not df_c.empty:
+                st.dataframe(df_c, use_container_width=True)
             else:
-                st.info("No hay citas programadas.")
+                st.info("No hay citas en la agenda.")
         except:
-            st.warning("Cree la pestaña 'Citas' en su Google Sheets para ver la agenda.")
+            st.warning("Asegúrese de que exista la pestaña 'Citas' en su Excel.")
 
+# ---------------------------------------------------------
+# MÓDULO 4: CONFIGURACIÓN
+# ---------------------------------------------------------
+elif menu == "Configuración":
+    st.header("⚙️ Configuración")
+    st.write("Sistemas operativos.")
