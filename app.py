@@ -182,5 +182,3 @@ elif menu == "Configuración":
 1.  **Métricas en tiempo real:** Ahora puedes ver cuánto has recaudado **hoy** nada más entrar a la pestaña de Facturación.
 2.  **Método de Pago:** Agregamos una columna para que sepas si el dinero entró en efectivo o transferencia.
 3.  **Dropdown de Pacientes:** No tienes que escribir el nombre, solo seleccionarlo de los que ya registraste.
-
-¡Sube este código y empieza a cobrar de forma profesional! ¿Cómo lo ves?
