@@ -177,8 +177,3 @@ elif menu == "Configuración":
             <p><b>Logo Institucional:</b> Cargado con éxito</p>
         </div>
     """, unsafe_allow_html=True)
-
-### ¿Qué mejoramos?
-1.  **Métricas en tiempo real:** Ahora puedes ver cuánto has recaudado **hoy** nada más entrar a la pestaña de Facturación.
-2.  **Método de Pago:** Agregamos una columna para que sepas si el dinero entró en efectivo o transferencia.
-3.  **Dropdown de Pacientes:** No tienes que escribir el nombre, solo seleccionarlo de los que ya registraste.
