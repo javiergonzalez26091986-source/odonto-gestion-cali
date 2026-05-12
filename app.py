@@ -5,8 +5,8 @@ import datetime
 import cloudinary
 import cloudinary.uploader
 
-# --- CONFIGURACIÓN INICIAL ---
-st.set_page_config(page_title="Odonto-Cali", page_icon="🦷", layout="wide")
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Odonto-Cali", page_icon="🦷")
 
 # --- CONFIGURACIÓN DE CLOUDINARY ---
 cloudinary.config(
@@ -19,61 +19,58 @@ cloudinary.config(
 # --- CONEXIÓN A GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def cargar_datos():
-    try:
-        # worksheet="Pacientes" debe existir en tu Google Sheets
-        return conn.read(worksheet="Pacientes", ttl=0)
-    except:
-        return pd.DataFrame()
-
 def subir_a_cloudinary(archivo):
     try:
         resultado = cloudinary.uploader.upload(archivo)
         return resultado['secure_url']
     except Exception as e:
-        st.error(f"Error al subir imagen: {e}")
+        st.error(f"Error en Cloudinary: {e}")
         return None
 
-# --- INTERFAZ ---
-st.title("🦷 Odontología Familiar Especializada")
+st.title("🦷 Sistema de Gestión Odonto-Cali")
 
-menu = st.sidebar.selectbox("Menú", ["Registro de Pacientes", "Ver Pacientes"])
-
-if menu == "Registro de Pacientes":
-    st.header("📋 Registro")
-    with st.form("form_registro", clear_on_submit=True):
+# --- FORMULARIO COMPLETO ---
+with st.form("registro_paciente", clear_on_submit=True):
+    st.subheader("Datos Personales")
+    col1, col2 = st.columns(2)
+    
+    with col1:
         nombre = st.text_input("Nombre Completo")
-        cedula = st.text_input("Cédula")
-        foto = st.file_uploader("Foto del Paciente", type=['jpg', 'png', 'jpeg'])
-        
-        if st.form_submit_button("Guardar Registro"):
-            if nombre and cedula and foto:
+        cedula = st.text_input("Cédula / ID")
+        telefono = st.text_input("Teléfono de contacto")
+    
+    with col2:
+        fecha_nacimiento = st.date_input("Fecha de Nacimiento", min_value=datetime.date(1920, 1, 1))
+        eps = st.text_input("EPS / Aseguradora")
+        genero = st.selectbox("Género", ["Masculino", "Femenino", "Otro"])
+
+    st.subheader("Información Clínica")
+    motivo = st.text_area("Motivo de la consulta")
+    foto = st.file_uploader("Fotografía del paciente / Rx", type=['jpg', 'png', 'jpeg'])
+    
+    enviar = st.form_submit_button("Registrar Paciente")
+
+    if enviar:
+        if nombre and cedula and foto:
+            with st.spinner("Guardando información..."):
                 url_foto = subir_a_cloudinary(foto)
+                
                 if url_foto:
+                    # Preparamos la fila con TODOS los campos
                     nueva_fila = pd.DataFrame([{
                         "Nombre": nombre.upper(),
                         "Cédula": str(cedula),
+                        "Teléfono": telefono,
+                        "Fecha_Nacimiento": str(fecha_nacimiento),
+                        "EPS": eps.upper(),
+                        "Género": genero,
+                        "Motivo": motivo,
                         "Foto": url_foto,
-                        "Fecha": str(datetime.date.today())
+                        "Fecha_Registro": str(datetime.date.today())
                     }])
+                    
+                    # Guardamos en la pestaña "Pacientes"
                     conn.update(worksheet="Pacientes", data=nueva_fila)
-                    st.success(f"✅ {nombre} registrado correctamente.")
-            else:
-                st.warning("Faltan datos obligatorios.")
-
-elif menu == "Ver Pacientes":
-    st.header("👥 Listado")
-    df = cargar_datos()
-    if not df.empty:
-        st.dataframe(df)
-        for index, row in df.iterrows():
-            with st.expander(f"Paciente: {row['Nombre']}"):
-                col1, col2 = st.columns([1, 2])
-                with col1:
-                    if row['Foto']:
-                        st.image(row['Foto'], width=200)
-                with col2:
-                    st.write(f"**Cédula:** {row['Cédula']}")
-                    st.write(f"**Fecha Registro:** {row['Fecha']}")
-    else:
-        st.info("No hay pacientes registrados aún.")
+                    st.success(f"✅ Paciente {nombre} registrado con éxito.")
+        else:
+            st.warning("Por favor completa los campos obligatorios: Nombre, Cédula y Foto.")
