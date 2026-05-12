@@ -56,7 +56,7 @@ with st.sidebar:
     if st.button("💰 Facturación"): st.session_state.menu_actual = "Facturación"
     if st.button("⚙️ Configuración"): st.session_state.menu_actual = "Configuración"
     st.markdown("---")
-    st.caption("v2.1 - Gestión Odonto-Cali")
+    st.caption("v1.0 - Gestión Odonto-Cali")
 
 menu = st.session_state.menu_actual
 
