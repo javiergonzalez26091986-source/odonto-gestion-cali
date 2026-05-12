@@ -118,7 +118,14 @@ if menu == "Registro de Pacientes":
             eps = st.text_input("EPS")
             fecha_nac = st.date_input("Fecha de Nacimiento", min_value=datetime.date(1940,1,1))
         
-        foto = st.file_uploader("Foto Inicial / Rx", type=['jpg', 'png', 'jpeg'])
+        # --- MÓDULO 1: REGISTRO DE PACIENTES ---
+# (Busca esta parte en tu código y reemplaza solo el file_uploader)
+
+        # He ampliado la lista para incluir JFIF y otros formatos técnicos
+        foto = st.file_uploader(
+            "Foto Inicial / Rx / Documentos", 
+            type=['jpg', 'png', 'jpeg', 'jfif', 'webp', 'bmp', 'heic', 'pdf', 'tiff']
+        )
         observaciones = st.text_area("Observaciones Iniciales")
         
         if st.form_submit_button("Guardar Paciente"):
