@@ -8,6 +8,26 @@ import cloudinary.uploader
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Odonto-Cali", page_icon="🦷", layout="wide")
 
+# --- ESTILOS CSS PERSONALIZADOS (Para que los botones resalten) ---
+st.markdown("""
+    <style>
+    div.stButton > button {
+        width: 100%;
+        border-radius: 5px;
+        height: 3em;
+        background-color: #262730;
+        color: white;
+        border: 1px solid #464855;
+        text-align: left;
+        padding-left: 20px;
+    }
+    div.stButton > button:hover {
+        border-color: #FF4B4B;
+        color: #FF4B4B;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- CONFIGURACIÓN DE CLOUDINARY ---
 cloudinary.config(
     cloud_name = st.secrets["cloudinary"]["cloud_name"],
@@ -27,23 +47,38 @@ def subir_a_cloudinary(archivo):
         st.error(f"Error en Cloudinary: {e}")
         return None
 
-# --- BARRA LATERAL (MENÚ) ---
+# --- LÓGICA DE NAVEGACIÓN PROFESIONAL ---
+if 'menu_actual' not in st.session_state:
+    st.session_state.menu_actual = "Registro de Pacientes"
+
 with st.sidebar:
     st.title("🦷 Odonto-Cali")
     st.markdown("---")
-    menu = st.radio(
-        "SELECCIONE UN MÓDULO:",
-        ["Registro de Pacientes", "Evolución y Galería", "Agenda de Citas", "Configuración"],
-        index=0
-    )
+    st.write("**SELECCIONE UN MÓDULO:**")
+    
+    if st.button("📋 Registro de Pacientes"):
+        st.session_state.menu_actual = "Registro de Pacientes"
+    
+    if st.button("📂 Evolución y Galería"):
+        st.session_state.menu_actual = "Evolución y Galería"
+        
+    if st.button("📅 Agenda de Citas"):
+        st.session_state.menu_actual = "Agenda de Citas"
+        
+    if st.button("⚙️ Configuración"):
+        st.session_state.menu_actual = "Configuración"
+        
     st.markdown("---")
-    st.info("Versión 1.3 - Gestión Odontológica")
+    st.caption("Versión 1.4 - Gestión Odontológica")
+
+# Capturamos la selección para mostrar el contenido
+menu = st.session_state.menu_actual
 
 # ---------------------------------------------------------
 # MÓDULO 1: REGISTRO DE PACIENTES
 # ---------------------------------------------------------
 if menu == "Registro de Pacientes":
-    st.title("📋 Registro de Nuevo Paciente")
+    st.header("📋 Registro de Nuevo Paciente")
     with st.form("registro_paciente", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -77,56 +112,43 @@ if menu == "Registro de Pacientes":
                 st.warning("Nombre, Cédula y Foto son campos obligatorios.")
 
 # ---------------------------------------------------------
-# MÓDULO 2: EVOLUCIÓN Y GALERÍA (Aquí corregimos el KeyError)
+# MÓDULO 2: EVOLUCIÓN Y GALERÍA
 # ---------------------------------------------------------
 elif menu == "Evolución y Galería":
-    st.title("📂 Historial y Evolución")
+    st.header("📂 Historial y Evolución")
     try:
-        # Forzamos la lectura fresca del Excel
         df = conn.read(worksheet="Pacientes", ttl=0)
-        
         if not df.empty:
             busqueda = st.text_input("🔍 Buscar por Nombre o Cédula").upper()
             if busqueda:
-                # Filtro seguro por nombre o cédula
                 df = df[df['Nombre'].str.contains(busqueda, na=False) | df['Cédula'].astype(str).str.contains(busqueda, na=False)]
             
             for index, row in df.iterrows():
-                # .get('Nombre', 'N/A') evita que la app se rompa si falta la columna
-                nombre_p = row.get('Nombre', 'Sin nombre')
-                cedula_p = row.get('Cédula', 'Sin ID')
-                
-                with st.expander(f"👤 {nombre_p} (CC: {cedula_p})"):
+                with st.expander(f"👤 {row.get('Nombre', 'Sin nombre')} (CC: {row.get('Cédula', 'Sin ID')})"):
                     c1, c2 = st.columns([1, 2])
                     with c1:
-                        # Verificamos si existe la columna 'Foto' y si tiene contenido
                         url_foto = row.get('Foto', None)
                         if url_foto and str(url_foto) != 'nan':
-                            st.image(url_foto, caption="Registro Fotográfico")
-                        else:
-                            st.warning("No hay foto disponible.")
+                            st.image(url_foto, use_container_width=True)
                     with c2:
-                        # Usamos .get() para todas las columnas dudosas
                         st.write(f"**Teléfono:** {row.get('Teléfono', 'N/D')}")
                         st.write(f"**EPS:** {row.get('EPS', 'N/D')}")
-                        st.write(f"**Fecha de Registro:** {row.get('Fecha_Registro', 'N/D')}")
-                        st.write(f"**Observaciones:** {row.get('Observaciones', 'Sin observaciones registradas')}")
+                        st.write(f"**Observaciones:** {row.get('Observaciones', 'N/D')}")
         else:
-            st.info("No hay pacientes registrados en la base de datos.")
-    except Exception as e:
-        st.error(f"Error al cargar la base de datos: {e}")
+            st.info("No hay registros.")
+    except:
+        st.error("Error al conectar con la base de datos.")
 
 # ---------------------------------------------------------
 # MÓDULO 3: AGENDA DE CITAS
 # ---------------------------------------------------------
 elif menu == "Agenda de Citas":
-    st.title("📅 Calendario de Citas")
-    st.info("Módulo en construcción. Próximamente integración con el registro.")
+    st.header("📅 Calendario de Citas")
+    st.info("Módulo en construcción.")
 
 # ---------------------------------------------------------
 # MÓDULO 4: CONFIGURACIÓN
 # ---------------------------------------------------------
 elif menu == "Configuración":
-    st.title("⚙️ Configuración")
-    st.write("Base de Datos (Google Sheets): ✅ Conectado")
-    st.write("Almacenamiento (Cloudinary): ✅ Conectado")
+    st.header("⚙️ Configuración")
+    st.write("Base de Datos y Cloudinary: ✅ Operativos")
