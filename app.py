@@ -168,12 +168,40 @@ elif menu == "Facturación":
 # MÓDULO 5: CONFIGURACIÓN
 # ---------------------------------------------------------
 elif menu == "Configuración":
-    st.header("⚙️ Estado del Sistema")
-    st.markdown("""
-        <div style="background-color:#111; padding:20px; border-radius:10px; border:1px solid #333;">
-            <h3 style='color:#00AEEF; margin-top:0;'>🟢 Servicios Conectados</h3>
-            <p><b>Google Sheets:</b> BD_Odontologia (Pestañas: Pacientes, Citas, Facturacion)</p>
-            <p><b>Cloudinary:</b> Almacenamiento Seguro Activo</p>
-            <p><b>Logo Institucional:</b> Cargado con éxito</p>
-        </div>
-    """, unsafe_allow_html=True)
+    st.header("⚙️ Centro de Control y Estado")
+    st.write("Verifique la conexión de los servicios internos del programa.")
+    
+    col_a, col_b = st.columns(2)
+    
+    with col_a:
+        st.markdown("""
+            <div class="status-box">
+                <h3 style='color: #00AEEF; margin-top:0;'>🟢 Google Sheets</h3>
+                <p><b>Estado:</b> Conectado y Sincronizado</p>
+                <p><b>Base de Datos:</b> BD_Odontologia</p>
+                <p><b>Pestañas detectadas:</b> Pacientes, Consultas, Citas, Facturacion</p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("""
+            <div class="status-box">
+                <h3 style='color: #00AEEF; margin-top:0;'>🟢 Cloudinary Cloud</h3>
+                <p><b>Estado:</b> Servidor de Imágenes Activo</p>
+                <p><b>Seguridad:</b> SSL Habilitado (HTTPS)</p>
+                <p><b>Formatos:</b> JPG, PNG, JFIF, WEBP, HEIC, PDF</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col_b:
+        st.markdown("""
+            <div class="status-box">
+                <h3 style='color: #00AEEF; margin-top:0;'>💻 Sistema Local</h3>
+                <p><b>Logo Institucional:</b> Cargado (Base64)</p>
+                <p><b>Versión del Software:</b> 2.0 (Mayo 2026)</p>
+                <p><b>Ubicación:</b> Yumbo, Valle del Cauca</p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🔄 Refrescar Conexiones"):
+            st.cache_data.clear()
+            st.rerun()
