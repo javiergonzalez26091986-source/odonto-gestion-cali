@@ -20,7 +20,7 @@ def get_base64_logo(path):
 
 logo_base64 = get_base64_logo("logo_odontología_familiar.jpg")
 
-# --- ESTILOS CSS PERSONALIZADOS ---
+# --- ESTILOS CSS ---
 st.markdown("""
     <style>
     div.stButton > button {
@@ -66,7 +66,7 @@ try:
     lista_pacientes = df_p['Nombre'].tolist() if not df_p.empty else []
 except: lista_pacientes = []
 
-# --- MÓDULOS 1, 2, 3 (Igual a versiones anteriores) ---
+# --- MÓDULOS 1, 2, 3
 if menu == "Registro de Pacientes":
     st.header("📋 Registro de Nuevo Paciente")
     with st.form("reg_p"):
@@ -110,7 +110,7 @@ elif menu == "Agenda de Citas":
         except: st.info("Cree la pestaña 'Citas'")
 
 # ---------------------------------------------------------
-# MÓDULO 4: FACTURACIÓN (NUEVO)
+# MÓDULO 4: FACTURACIÓN
 # ---------------------------------------------------------
 elif menu == "Facturación":
     st.header("💰 Gestión de Facturación")
